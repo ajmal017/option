@@ -1,5 +1,7 @@
 example command for execute this script:
+
 cd option
+
 python bombom.py --config_path configure_file.txt
 
 please modify the configure file before you execute this script

@@ -48,9 +48,10 @@ class Boss(object):
 		for stock_name in os.listdir(config_lines[0].strip()):
 			self.stock_queues.put(stock_name)
 
-		self.period_days = int(config_lines[1].strip())
-		self.difference_rate = float(config_lines[2].strip())
-		self.num_worker = int(config_lines[3].strip())
+		self.num_worker = int(config_lines[1].strip())
+		#self.period_days = int(config_lines[2].strip())
+		#self.difference_rate = float(config_lines[3].strip())
+
 
 	def hire_worker(self):
 		"""

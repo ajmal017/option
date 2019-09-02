@@ -1,5 +1,8 @@
 # http://www.liujiangblog.com/course/python/82
-# 20190902 analysis_statement當做基本面filter
+# 20190902 future work
+# analysis_statement當做基本面filter
+# 將通過analysis_statement當做基本面filter的股票下載yahoo finance的.csv
+# 再算get_supporting_point
 # 繼續把皓謙講的做完
 
 import copy
@@ -74,11 +77,12 @@ class Trader(object):
 		"""
 		while not stock_queues.empty():
 			stock_name = stock_queues.get()
-			if self.analysis_statement(stock_name):
-				continue
+			stock_name = 'AMD.csv'
+			#if self.analysis_statement(stock_name):
+			#	continue
 			file_path = os.path.join(self.stock_folder_path, stock_name)
 			self.get_supporting_point(stock_name, file_path)
-			#print ('worker number {}, stock_name is {}'.format(workers_num, stock_name))
+			print ('worker number {}, stock_name is {}'.format(workers_num, stock_name))
 			#time.sleep(1)
 
 
@@ -118,6 +122,7 @@ class Boss(object):
 		"""
 		for i in range(self.num_worker):
 			trader = copy.deepcopy(Trader(self.period_days, self.difference_rate, self.stock_folder_path))
+			print ('worker {}'.format(i))
 			self.workers.append(trader)
 
 	def assign_task(self):
@@ -126,9 +131,9 @@ class Boss(object):
 			p.start()
 			p.join(timeout=0.1)
 
-			p = Process(target=self.workers[i].analysis_document, args=(i, self.stock_queues,))
-			p.start()
-			p.join(timeout=0.1)
+			#p = Process(target=self.workers[i].analysis_document, args=(i, self.stock_queues,))
+			#p.start()
+			#p.join(timeout=0.1)
 
 		print ('assign task finish!')
 

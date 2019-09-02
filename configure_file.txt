@@ -1,2 +1,5 @@
-/Users/Wiz/Desktop/option/stocks
+stocks
+pickle_result
+6
 5
+0.1

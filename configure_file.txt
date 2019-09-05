@@ -1,5 +1,6 @@
 stocks
 pickle_result
-6
+4
 5
 0.1
+10

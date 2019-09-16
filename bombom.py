@@ -23,8 +23,9 @@ import fix_yahoo_finance as yf
 import datetime
 
 import finviz
-print (finviz.get_stock('AMD'))
-assert False
+import copy
+#print (finviz.get_stock('AMD'))
+#assert False
 # Optionable
 # Avg Volume
 # EPS (ttm)
@@ -38,31 +39,208 @@ assert False
 
 #assert False
 
+# self.ma_days = 200
+# stock_dict = {	supported_point: {  Interval: xxx 
+#										vol_val: xxx	},
+#					topk_vol:		[{'volume': max_volume, 'close': max_volume_close}, 
+#									{'volume': max_volume2, 'close': max_volume_close2}....],
+#					moving_average: {'2012-02-14': {'type': big_cow,
+#													'close': xxx,
+#													'MA5': xxx,
+#													'MA20': xxx,
+#													'MA40': xxx,
+#													'MA80': xxx },
+#									'2012-02-1X': {'type': small_bear,
+#													'close': xxx,
+#													'MA5': xxx,
+#													'MA20': xxx,
+#													'MA40': xxx,
+#													'MA80': xxx },
+#									....}
+#				}
 
 class Trader(object):
 	def __init__(self, period_days, difference_rate, stock_folder_path, roe_ttm):
 		self.stock_name = -1
 		self.period_days = period_days
-		self.difference_rate = difference_rate
+		self.difference_rate = 0.05#difference_rate
 		self.roe_ttm = roe_ttm
 		self.stock_folder_path = stock_folder_path
+		self.value_group = -1
+		self.top_volume_num = 10
+		self.part_num = 100
+
+#
 
 	def get_supporting_point(self, stock_name, file_path):
+		stock_dict_sum = {'supported_point':{},'topk_vol':[],'moving_average':{}}
 		stock_dict = {}
+		stock_close_list = []
+		press_list = []
+		stock_date_list = []
+		stock_volume_list = []
+		count = 0
 		with open(file_path, 'r') as file_read:
 			for line in file_read.readlines():
+				count+=1
+				#if count < 12085 or count > 12095:#or count > 13500:
+				#	continue
 				line = line.split(',')
 				if line[0] == 'Date':
 					continue
-				Date,Open,High,Low,Close,Adj_Close,Volume = line[0], line[1], line[2], line[3], line[4], line[5], line[6]
-				stock_dict[Date] = {'Open': Open,
+				Date,Open,High,Low,Close,Adj_Close,Volume = line[0], line[1], line[2], line[3], line[4], line[5], int(line[6].strip('\n'))
+				stock_dict[Date] = {'Date': Date,
+									'Open': Open,
 									'High': High,
 									'Low': Low,
 									'Close': Close,
 									'Adj_Close': Adj_Close,
 									'Volume': Volume}
+				stock_close_list.append(float(Close))
+				stock_volume_list.append(int(Volume))
+				stock_date_list.append(Date)
 		#print (stock_dict)
-		print (stock_name, 'get_supporting_point')
+		#print (stock_name, 'get_supporting_point')
+
+		# top3 volume
+		top3_volume_list = []
+		stock_volume_list_tmp = copy.deepcopy(stock_volume_list)
+		for num in range(self.top_volume_num):
+			max_volume = max(stock_volume_list_tmp)
+			stock_volume_list_tmp.remove(max_volume)
+			max_idx = stock_volume_list.index(max_volume)
+			max_date = stock_date_list[max_idx]
+			max_volume_close = stock_close_list[max_idx]
+			top3_volume_list.append({max_date: {'volume': max_volume, \
+												'close': max_volume_close}})
+		print (top3_volume_list)
+
+		"""
+		# press
+		for idx, Close in enumerate(stock_close_list):
+			if idx < self.period_days or idx+self.period_days > len(stock_close_list):
+				continue
+			Close_five_days_pass_min = min(stock_close_list[idx-self.period_days:idx])
+			if not Close > Close_five_days_pass_min*1.1:
+				continue
+			Close_five_days_pass_max = max(stock_close_list[idx-self.period_days:idx])
+			if not Close > Close_five_days_pass_max:
+				continue
+			Close_five_days_next_max = max(stock_close_list[idx+1:idx+1+self.period_days])
+			if not Close > Close_five_days_next_max:
+				continue
+			Close_five_days_next_min = min(stock_close_list[idx+1:idx+1+self.period_days])
+			if not Close > Close_five_days_next_min*1.1:
+				continue
+			#print (idx, Close)
+			press_dict = {'Date': stock_date_list[idx],
+							'Volume_Value': Close*stock_dict[stock_date_list[idx]]['Volume'],
+							'Close': Close}
+			press_list.append(press_dict)
+		print (press_list)
+		"""
+
+		support_list = []
+		# support
+		for idx, Close in enumerate(stock_close_list):
+			if idx < self.period_days or idx+self.period_days > len(stock_close_list):
+				continue
+
+			Close_five_days_pass_min = min(stock_close_list[idx-self.period_days:idx])
+			if not Close < Close_five_days_pass_min:
+				continue
+			Close_five_days_pass_max = max(stock_close_list[idx-self.period_days:idx])
+			if not Close < Close_five_days_pass_max:
+				continue
+			Close_five_days_next_max = max(stock_close_list[idx+1:idx+1+self.period_days])
+			if not Close < Close_five_days_next_max*1.1:
+				continue
+			Close_five_days_next_min = min(stock_close_list[idx+1:idx+1+self.period_days])
+			if not Close < Close_five_days_next_min:
+				continue
+			#print (idx, Close)
+			support_dict = {'Date': stock_date_list[idx],
+							'Volume_Value': Close*stock_dict[stock_date_list[idx]]['Volume'],
+							'Close': Close}
+			support_list.append(support_dict)
+		#print (support_list)
+
+		support_all_dict = {}
+		part_value = round(max(stock_close_list) / self.part_num, 3)
+		for num in range(self.part_num):
+			support_all_dict['{}_{}'.format(round(part_value*num, 3), round(part_value*(num+1), 2))] = 0
+		for support_dict_tmp in support_list:
+			num = int(support_dict_tmp['Close'] / part_value)
+			support_all_dict['{}_{}'.format(round(part_value*num, 3), round(part_value*(num+1), 2))] \
+				+=support_dict['Volume_Value']
+
+		#print (support_all_dict)
+		support_all_list = []
+		for key in support_all_dict.keys():
+			if support_all_dict[key] == 0:
+				continue
+			if support_all_list == []:
+				support_all_list.append({'Interval': key, \
+										'Volume_Value': support_all_dict[key]})
+			else:
+				insert_idx = 0
+				for support_dict in support_all_list:
+					#print (support_dict)
+					#print (support_dict['Volume_Value'], support_all_dict[key])
+					if support_dict['Volume_Value'] >= support_all_dict[key]:
+						insert_idx += 1
+					else:
+						break
+				support_all_list.insert(insert_idx, {'Interval': key, \
+										'Volume_Value': support_all_dict[key]})
+		print (support_all_list)
+
+# 用基本面篩選
+# MA 40 80負斜率持續 70天就不要
+# 判斷大小牛熊（大牛：MA5>MA20>MA40>MA80、小牛：MA40>MA80）
+#  
+
+# csv_type： MA_5 MA_20 MA_40 MA_80 MA_sum 支撐 大量
+
+		# 將value_volume=0的刪除
+		# 用將value_volume排序，由大到小
+		# 找到前10大量的落點
+		# 回測改變period_days、difference_rate、要幾個最大量、
+		# 找到support point時抓前後幾天、top k是volume or volume*value的detection rate
+		
+
+		#count_list = range(len(stock_date_list))
+		#plt.plot(count_list, stock_volume_list)
+		#plt.show()
+
+
+		"""
+		import numpy as np
+		import pandas as pd
+		import matplotlib.pyplot as plt
+
+		x = stock_date_list
+		x = np.asarray(range(len(stock_date_list)))
+		y_val = np.asarray(stock_close_list)*2000000
+		y_vol = np.asarray(stock_volume_list)
+		print (x)
+		print (y_val)
+		plt.plot(x, y_val)
+		plt.plot(x, y_vol)
+		plt.show()
+		"""
+
+#		fig, axes = plt.subplots(nrows=2, ncols=1, sharex=True, figsize=(8, 8))
+#		labelled_data = zip((y_val, y_vol), ('value', 'volume'), ('b', 'g'))
+#		fig.suptitle('Three Random Trends', fontsize=16)
+#
+#		for i, ld in enumerate(labelled_data):
+#			ax = axes[i]
+#			ax.plot(x, ld[0], label=ld[1], color=ld[2])
+#			#ax.set_ylabel('Cum. sum')
+#			#ax.legend(loc='upper left', framealpha=0.5, prop={'size': 'small'})
+#		axes[-1].set_xlabel('Date')
+#		plt.show()
 
 	def analysis_statement(self, stock_name):
 		stock_dict = finviz.get_stock(stock_name)
@@ -193,5 +371,15 @@ def get_stock_name_list():
 		stock_name_list.append(stock_dict['Ticker'])
 	return stock_name_list
 
+def main_temp():
+	period_days = 5
+	difference_rate = 0.1
+	stock_folder_path = 'stocks'
+	roe_ttm = 1
+	t = Trader(period_days, difference_rate, stock_folder_path, roe_ttm)
+	stock_name = 'AAL'
+	file_path = '/Users/Wiz/Desktop/option/stocks/AAL.csv'
+	t.get_supporting_point(stock_name, file_path)
+
 if __name__ == '__main__':
-	main()
+	main_temp()

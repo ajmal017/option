@@ -122,7 +122,7 @@ class Trader(object):
 					#									'close': max_volume_close}})
 					#print (int(max_volume_close//(max_volume_close // self.part_num)))
 					topk_volume_list[int(max_volume_close/(self.interval_value))] += max_volume
-				print (topk_volume_list)
+				#print (topk_volume_list)
 
 				stock_dict_sum['topk_vol'] = topk_volume_list
 			if key == 'press':
@@ -243,7 +243,7 @@ class Trader(object):
 												'Volume_Value': support_all_dict[key], \
 												'topk_volume': topk_volume_all_dict[key]})
 #												'''
-				print (support_all_list)
+				#print (support_all_list)
 				stock_dict_sum['supported_point'] = support_all_list
 
 			if key == 'moving_average':
@@ -312,7 +312,7 @@ class Trader(object):
 				stock_dict_sum['moving_average'] = MA_dict_all
 				stock_dict_sum['MA_state_dict'] = MA_state_dict
 
-		#print (stock_dict_sum)
+		print (stock_dict_sum)
 				
 
 

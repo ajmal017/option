@@ -150,9 +150,7 @@ class Trader(object):
 				#print (press_list)
 			if key == 'supported_point':
 				support_list = []
-				# support
-				Volume_Value_max = -1
-				Volume_max = -1
+				# calculate supported point
 				for idx, Close in enumerate(stock_close_list):
 					if idx < self.period_days or idx+self.period_days > len(stock_close_list):
 						continue
@@ -174,33 +172,55 @@ class Trader(object):
 									'Volume_Value': Close*stock_dict[stock_date_list[idx]]['Volume'],
 									'Volume': stock_dict[stock_date_list[idx]]['Volume'],
 									'Close': Close}
-					Volume_Value_max = Close*stock_dict[stock_date_list[idx]]['Volume'] if Close*stock_dict[stock_date_list[idx]]['Volume'] > Volume_Value_max else Volume_Value_max
-					Volume_max = stock_dict[stock_date_list[idx]]['Volume'] if stock_dict[stock_date_list[idx]]['Volume'] > Volume_max else Volume_max
+					#Volume_Value_max = Close*stock_dict[stock_date_list[idx]]['Volume'] if Close*stock_dict[stock_date_list[idx]]['Volume'] > Volume_Value_max else Volume_Value_max
+					#Volume_max = stock_dict[stock_date_list[idx]]['Volume'] if stock_dict[stock_date_list[idx]]['Volume'] > Volume_max else Volume_max
 					support_list.append(support_dict)
-				#print (support_list)
 
-				#print (support_list)
-				#assert False
+				# interval
+				Volume_Value_max = -1
+				Volume_max = -1
 				support_all_dict = {}
 				topk_volume_all_dict = {}
 				for num in range(self.part_num):
 					support_all_dict['{}_{}'.format(round(self.interval_value*num, 3), round(self.interval_value*(num+1), 2))] = 0
 					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*num, 3), round(self.interval_value*(num+1), 2))] = 0
+				
+
 				for support_dict_tmp in support_list:
 					num = int(support_dict_tmp['Close'] / self.interval_value)
 					support_all_dict['{}_{}'.format(round(self.interval_value*num, 3), round(self.interval_value*(num+1), 2))] \
-						+=(support_dict_tmp['Volume_Value']) / float(Volume_Value_max)
-				for idx, value in enumerate(topk_volume_list):
-					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*idx, 3), round(self.interval_value*(idx+1), 2))] \
-						+=value / float(Volume_max)
-				#print (support_all_dict)
-				#print (topk_volume_all_dict)
-				#assert False
-						#sorted by supported volume * close value
-						#+=support_dict_tmp['Volume_Value']
+						+=support_dict_tmp['Volume_Value']
+				# normalize support_all_dict
+				# first, get Volume_Value_max
+				for support_dict_val in support_all_dict.values():
+					Volume_Value_max = support_dict_val if support_dict_val > Volume_Value_max else Volume_Value_max
+				# second, normalization
+				for support_dict_key in support_all_dict.keys():
+					support_all_dict[support_dict_key] = support_all_dict[support_dict_key] / float(Volume_Value_max)
 
-				#print (support_all_dict)
+
+				for idx, value in enumerate(topk_volume_list):
+					Volume_max = value if value > Volume_max else Volume_max
+					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*idx, 3), round(self.interval_value*(idx+1), 2))] \
+						+=value
+				for idx, value  in enumerate(topk_volume_list):
+					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*idx, 3), round(self.interval_value*(idx+1), 2))] \
+						= topk_volume_all_dict['{}_{}'.format(round(self.interval_value*idx, 3), round(self.interval_value*(idx+1), 2))] / float(Volume_max)
+
+
+				# sort by interval value
+				'''
 				support_all_list = []
+				for key in topk_volume_all_dict.keys():
+					support_all_list.append({'Interval': key, \
+												'Volume_Value': support_all_dict[key], \
+												'topk_volume': topk_volume_all_dict[key]})
+												'''
+
+				# sort by topk_volume or Volume_Value
+#				'''
+				support_all_list = []
+
 				for key in topk_volume_all_dict.keys():
 					#if support_all_dict[key] == 0:
 					#	continue
@@ -222,8 +242,10 @@ class Trader(object):
 						support_all_list.insert(insert_idx, {'Interval': key, \
 												'Volume_Value': support_all_dict[key], \
 												'topk_volume': topk_volume_all_dict[key]})
+#												'''
 				print (support_all_list)
 				stock_dict_sum['supported_point'] = support_all_list
+
 			if key == 'moving_average':
 #					moving_average: {'2012-02-14': {'type': big_cow,
 #													'close': xxx,

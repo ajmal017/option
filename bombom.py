@@ -19,11 +19,13 @@ import os
 
 from pandas_datareader import data as pdr
 import matplotlib.pyplot as plt
-import fix_yahoo_finance as yf
+#import fix_yahoo_finance as yf
 import datetime
 
 import finviz
 import copy
+import requests
+import pandas as pd
 #print (finviz.get_stock('AMD'))
 #assert False
 # Optionable
@@ -75,6 +77,7 @@ class Trader(object):
 #
 
 	def get_supporting_point(self, stock_name, file_path):
+		print ('stock_name: {}'.format(stock_name))
 		stock_dict_sum = {'topk_vol':[],'supported_point':{},'moving_average':{}, 'MA_state_dict':{}}
 		#stock_dict_sum = {'moving_average':{}}
 		stock_dict = {}
@@ -83,6 +86,8 @@ class Trader(object):
 		stock_date_list = []
 		stock_volume_list = []
 		count = 0
+		interval_value_point = 5
+		Open_last, High_last, Low_last, Close_last, Volume_last = 0, 0, 0, 0, 0
 		with open(file_path, 'r') as file_read:
 			for line in file_read.readlines():
 				count+=1
@@ -91,18 +96,22 @@ class Trader(object):
 				line = line.split(',')
 				if line[0] == 'Date':
 					continue
-				Date,Open,High,Low,Close,Adj_Close,Volume = line[0], line[1], line[2], line[3], line[4], line[5], int(line[6].strip('\n'))
+				Date, Open, High, Low, Close, Adj_Close, Volume = line[0], line[1], line[2], line[3], line[4], line[5], (line[6].strip('\n'))
+				#print (Open, Volume)
+				if Open == 'null' or High == 'null' or Low == 'null' or Close == 'null' or Volume == 'null':
+					Open, High, Low, Close, Volume = Open_last, High_last, Low_last, Close_last, Volume_last
 				stock_dict[Date] = {'Date': Date,
 									'Open': Open,
 									'High': High,
 									'Low': Low,
-									'Close': Close,
+									'Close': float(Close),
 									'Adj_Close': Adj_Close,
-									'Volume': Volume}
+									'Volume': int(Volume)}
 				stock_close_list.append(float(Close))
 				stock_volume_list.append(int(Volume))
 				stock_date_list.append(Date)
-		self.interval_value = round(max(stock_close_list) / self.part_num, 3)
+				Open_last, High_last, Low_last, Close_last, Volume_last = Open, High, Low, Close, Volume
+		self.interval_value = round(max(stock_close_list) / self.part_num, interval_value_point)
 		#print (stock_dict)
 		#print (stock_name, 'get_supporting_point')
 		topk_volume_list = [0]*self.part_num
@@ -121,7 +130,8 @@ class Trader(object):
 					#topk_volume_list.append({max_date: {'volume': max_volume, \
 					#									'close': max_volume_close}})
 					#print (int(max_volume_close//(max_volume_close // self.part_num)))
-					topk_volume_list[int(max_volume_close/(self.interval_value))] += max_volume
+					idx_tmp = int(max_volume_close/(self.interval_value)) if int(max_volume_close/(self.interval_value)) <= len(topk_volume_list)-1 else len(topk_volume_list)-1
+					topk_volume_list[idx_tmp] += max_volume
 				#print (topk_volume_list)
 
 				stock_dict_sum['topk_vol'] = topk_volume_list
@@ -148,6 +158,86 @@ class Trader(object):
 									'Close': Close}
 					press_list.append(press_dict)
 				#print (press_list)
+			if key == 'pressed_point':
+				press_list = []
+				# calculate supported point
+				for idx, Close in enumerate(stock_close_list):
+					if idx < self.period_days or idx+self.period_days > len(stock_close_list):
+						continue
+
+					Close_five_days_pass_min = min(stock_close_list[idx-self.period_days:idx])
+					if not Close > Close_five_days_pass_min*1.1:
+						continue
+					Close_five_days_pass_max = max(stock_close_list[idx-self.period_days:idx])
+					if not Close > Close_five_days_pass_max:
+						continue
+					Close_five_days_next_max = max(stock_close_list[idx+1:idx+1+self.period_days])
+					if not Close > Close_five_days_next_max:
+						continue
+					Close_five_days_next_min = min(stock_close_list[idx+1:idx+1+self.period_days])
+					if not Close > Close_five_days_next_min*1.1:
+						continue
+					#print (idx, Close)
+					press_dict = {'Date': stock_date_list[idx],
+									'Volume_Value': Close*stock_dict[stock_date_list[idx]]['Volume'],
+									'Volume': stock_dict[stock_date_list[idx]]['Volume'],
+									'Close': Close}
+					press_list.append(press_dict)
+
+				# interval
+				Volume_Value_max = -1
+				Volume_max = -1
+				press_all_dict = {}
+				topk_volume_all_dict = {}
+				for num in range(self.part_num):
+					press_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] = 0
+					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] = 0
+				
+
+				for press_dict_tmp in press_list:
+					num = int(press_dict_tmp['Close'] / self.interval_value)
+					press_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] \
+						+=press_dict_tmp['Volume_Value']
+				# normalize press_all_dict
+				# first, get Volume_Value_max
+				for press_dict_val in press_all_dict.values():
+					Volume_Value_max = press_dict_val if press_dict_val > Volume_Value_max else Volume_Value_max
+				# second, normalization
+				for press_dict_key in press_all_dict.keys():
+					press_all_dict[press_dict_key] = press_all_dict[press_dict_key] / float(Volume_Value_max)
+
+
+				for idx, value in enumerate(topk_volume_list):
+					Volume_max = value if value > Volume_max else Volume_max
+					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*idx, interval_value_point), round(self.interval_value*(idx+1), interval_value_point))] \
+						+=value
+				for idx, value  in enumerate(topk_volume_list):
+					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*idx, interval_value_point), round(self.interval_value*(idx+1), interval_value_point))] \
+						= topk_volume_all_dict['{}_{}'.format(round(self.interval_value*idx, interval_value_point), round(self.interval_value*(idx+1), interval_value_point))] / float(Volume_max)
+
+				press_all_list = []
+
+				for key in topk_volume_all_dict.keys():
+					if press_all_list == []:
+						press_all_list.append({'Interval': key, \
+												'Volume_Value': press_all_dict[key], \
+												'topk_volume': topk_volume_all_dict[key]})
+					else:
+						insert_idx = 0
+						for press_dict in press_all_list:
+							# 現在要加入的press_all_dict[key]要加到idx多少
+							if press_dict['topk_volume'] >= topk_volume_all_dict[key]:
+								insert_idx += 1
+							else:
+								break
+						press_all_list.insert(insert_idx, {'Interval': key, \
+												'Volume_Value': press_all_dict[key], \
+												'topk_volume': topk_volume_all_dict[key]})
+#												'''
+				#print (press_all_list)
+				stock_dict_sum['pressed_point'] = press_all_list
+
+
 			if key == 'supported_point':
 				support_list = []
 				# calculate supported point
@@ -182,13 +272,13 @@ class Trader(object):
 				support_all_dict = {}
 				topk_volume_all_dict = {}
 				for num in range(self.part_num):
-					support_all_dict['{}_{}'.format(round(self.interval_value*num, 3), round(self.interval_value*(num+1), 2))] = 0
-					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*num, 3), round(self.interval_value*(num+1), 2))] = 0
+					support_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] = 0
+					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] = 0
 				
 
 				for support_dict_tmp in support_list:
 					num = int(support_dict_tmp['Close'] / self.interval_value)
-					support_all_dict['{}_{}'.format(round(self.interval_value*num, 3), round(self.interval_value*(num+1), 2))] \
+					support_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] \
 						+=support_dict_tmp['Volume_Value']
 				# normalize support_all_dict
 				# first, get Volume_Value_max
@@ -201,11 +291,11 @@ class Trader(object):
 
 				for idx, value in enumerate(topk_volume_list):
 					Volume_max = value if value > Volume_max else Volume_max
-					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*idx, 3), round(self.interval_value*(idx+1), 2))] \
+					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*idx, interval_value_point), round(self.interval_value*(idx+1), interval_value_point))] \
 						+=value
 				for idx, value  in enumerate(topk_volume_list):
-					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*idx, 3), round(self.interval_value*(idx+1), 2))] \
-						= topk_volume_all_dict['{}_{}'.format(round(self.interval_value*idx, 3), round(self.interval_value*(idx+1), 2))] / float(Volume_max)
+					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*idx, interval_value_point), round(self.interval_value*(idx+1), interval_value_point))] \
+						= topk_volume_all_dict['{}_{}'.format(round(self.interval_value*idx, interval_value_point), round(self.interval_value*(idx+1), interval_value_point))] / float(Volume_max)
 
 
 				# sort by interval value
@@ -270,10 +360,10 @@ class Trader(object):
 				for idx in range(len(stock_close_list)-1, len(stock_close_list)-self.ma_days, -1):
 					close = stock_close_list[idx]
 					# 1 2 3 4 5 6 7 8 len=8 [3:8]->[idx-ma+1:idx+1]
-					MA5 = round(sum(stock_close_list[idx-5:idx+1]) / 5.0, 2)
-					MA20 = round(sum(stock_close_list[idx-20:idx+1]) / 20.0, 2)
-					MA40 = round(sum(stock_close_list[idx-40:idx+1]) / 40.0, 2)
-					MA80 = round(sum(stock_close_list[idx-80:idx+1]) / 80.0, 2)
+					MA5 = round(sum(stock_close_list[idx-5+1:idx+1]) / 5.0, 2)
+					MA20 = round(sum(stock_close_list[idx-20+1:idx+1]) / 20.0, 2)
+					MA40 = round(sum(stock_close_list[idx-40+1:idx+1]) / 40.0, 2)
+					MA80 = round(sum(stock_close_list[idx-80+1:idx+1]) / 80.0, 2)
 
 					situation_type = 'big_cow' if MA5 > MA20 > MA40 > MA80 else 'small_cow' if MA40 > MA80 \
 									else 'big_bear' if MA5 < MA20 < MA40 < MA80 else 'small_bear'
@@ -294,14 +384,17 @@ class Trader(object):
 							MA_state_dict = {'MA40_state': 0, 'MA80_state': 0}
 
 						else:
-							if MA40_state == MA40_state_last and not change_state:
+							MA40_change_state = False if MA40_state_last == MA40_state else True
+							MA80_change_state = False if MA80_state_last == MA80_state else True
+							if MA40_change_state:
 								MA_state_dict['MA40_state'] += 1
 							else:
-								change_state = True
-							if MA80_state == MA80_state_last and not change_state:
+								MA40_change_state = True
+
+							if MA80_change_state:
 								MA_state_dict['MA80_state'] += 1
 							else:
-								change_state = True
+								MA80_change_state = True
 						MA40_state_last = MA40_state
 						MA80_state_last = MA80_state
 					MA40_last, MA80_last, = MA40, MA80
@@ -366,14 +459,28 @@ class Trader(object):
 	def analysis_statement(self, stock_name):
 		stock_dict = finviz.get_stock(stock_name)
 		if not stock_dict['Optionable'] == 'Yes':
+			#print ('unOptionable')
 			return False
 		if not 'M' in stock_dict['Avg Volume']:
+			#print ('low Volume')
 			return False
 		if '-' in stock_dict['ROE']:
+			#print ('-roe')
 			return False
 		if float(stock_dict['ROE'][:-1]) < 10.0:
+			#print ('roe')
 			return False
-		if float(stock_dict['EPS (ttm)']) > 0.0:
+		if '-' in stock_dict['EPS Q/Q']:
+			#print (stock_name, 'EPS Q/Q')
+			#print ('eps')
+			return False
+		if '-' in stock_dict['EPS next Q']:
+			#print (stock_name, 'EPS next Q')
+			#print ('eps2')
+			return False
+		if '-' in stock_dict['Sales Q/Q']:
+			#print (stock_name, 'EPS next Q')
+			#print ('eps2')
 			return False
 
 		return True
@@ -388,23 +495,38 @@ class Trader(object):
 # EPS next 5Y
 # EPS past 5Y
 # EPS Q/Q
-
 	def analysis_document(self, workers_num, stock_queues):
 		"""
 		calculating the supporting point and stress point
 		"""
 		while not stock_queues.empty():
 			stock_name = stock_queues.get()
-			if self.analysis_statement(stock_name):
+			if not self.analysis_statement(stock_name):
 				continue
 
 			sav_csv_path = '{}.csv'.format(os.path.join(self.stock_folder_path, stock_name))
-			data = yf.download("{}".format(stock_name[0:stock_name.find('.')]), start="1960-01-01", end="2020-12-31")
-			data.to_csv(sav_csv_path)
+			#data = yf.download("{}".format(stock_name[0:stock_name.find('.')]), start="1960-01-01", end="2020-12-31")
+			#data.to_csv(sav_csv_path)
+			df = self.crawl_price(stock_name)
+			if len(df) < self.ma_days:
+				continue
 			self.get_supporting_point(stock_name, sav_csv_path)
 			print ('worker number {}, stock_name is {}'.format(workers_num, stock_name))
 			#time.sleep(1)
 
+	@staticmethod
+	def crawl_price(stock_id):
+		now = int(datetime.datetime.now().timestamp())+86400
+		url = "https://query1.finance.yahoo.com/v7/finance/download/" + stock_id + "?period1=0&period2=" + str(now) + "&interval=1d&events=history&crumb=hP2rOschxO0"
+		response = requests.post(url)
+
+		with open('stocks/{}.csv'.format(stock_id), 'w') as f:
+			f.writelines(response.text)
+		try:
+			df = pd.read_csv('stocks/{}.csv'.format(stock_id), index_col='Date', parse_dates=['Date'])
+		except:
+			return []
+		return df
 
 class Boss(object):
 	def __init__(self, stock_name_list):
@@ -498,9 +620,16 @@ def main_temp():
 	stock_folder_path = 'stocks'
 	roe_ttm = 1
 	t = Trader(period_days, difference_rate, stock_folder_path, roe_ttm)
-	stock_name = 'AAL'
-	file_path = '/Users/Wiz/Desktop/option/stocks/AAL.csv'
+	stock_name = 'ACAM'
+	file_path = '/Users/Wiz/Desktop/option/stocks/ACAM.csv'
+	print (len(t.crawl_price(stock_name)))
+	#data = yf.download("{}".format(stock_name[0:stock_name.find('.')]), start="1960-01-01", end="2019-09-13")
+	#data.to_csv(file_path)
 	t.get_supporting_point(stock_name, file_path)
 
+
+
+
 if __name__ == '__main__':
+	#main()
 	main_temp()

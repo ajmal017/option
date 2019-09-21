@@ -8,6 +8,9 @@
 # https://github.com/dsmbgu8/image_annotate.py/issues/4
 # echo "backend: TkAgg" >> ~/.matplotlib/matplotlibrc
 
+import sys
+#sys.path.insert(0, '/home/ckwang/.local/lib/python2.7/site-packages')
+#sys.path.insert(0, '/usr/local/lib/python3.5/dist-packages')
 import copy
 import argparse
 import multiprocessing
@@ -73,6 +76,7 @@ class Trader(object):
 		self.top_volume_num = 10
 		self.part_num = 100
 		self.ma_days = 200
+		self.nKD = 9
 
 #
 
@@ -82,6 +86,8 @@ class Trader(object):
 		#stock_dict_sum = {'moving_average':{}}
 		stock_dict = {}
 		stock_close_list = []
+		stock_low_list = []
+		stock_high_list = []
 		press_list = []
 		stock_date_list = []
 		stock_volume_list = []
@@ -108,6 +114,8 @@ class Trader(object):
 									'Adj_Close': Adj_Close,
 									'Volume': int(Volume)}
 				stock_close_list.append(float(Close))
+				stock_low_list.append(float(Low))
+				stock_high_list.append(float(High))
 				stock_volume_list.append(int(Volume))
 				stock_date_list.append(Date)
 				Open_last, High_last, Low_last, Close_last, Volume_last = Open, High, Low, Close, Volume
@@ -116,6 +124,18 @@ class Trader(object):
 		#print (stock_name, 'get_supporting_point')
 		topk_volume_list = [0]*self.part_num
 		for key in stock_dict_sum.keys():
+			if key == 'KD':
+				for idx in range(len(stock_close_list)-self.ma_days, len(stock_close_list)):
+					n_stock_low = min(stock_low_list[idx-self.nKD+1:idx+1])
+					n_stock_high = max(stock_low_list[idx-self.nKD+1:idx+1])
+					close = stock_close_list[idx]
+					RSV = 100 * ((close-n_stock_low)/(close-n_stock_high))
+					# 1 2 3 4 5 6 7 8 len=8 [3:8]->[idx-ma+1:idx+1]
+					MA5 = round(sum(stock_close_list[idx-5+1:idx+1]) / 5.0, 2)
+					MA20 = round(sum(stock_close_list[idx-20+1:idx+1]) / 20.0, 2)
+					MA40 = round(sum(stock_close_list[idx-40+1:idx+1]) / 40.0, 2)
+					MA80 = round(sum(stock_close_list[idx-80+1:idx+1]) / 80.0, 2)
+
 			if key == 'topk_vol':
 				# topk volume
 				#topk_volume_list = [0]*self.part_num
@@ -633,8 +653,8 @@ def main_temp():
 	stock_folder_path = 'stocks'
 	roe_ttm = 1
 	t = Trader(period_days, difference_rate, stock_folder_path, roe_ttm)
-	stock_name = 'ACGL'
-	file_path = '/Users/Wiz/Desktop/option/stocks/ACGL.csv'
+	stock_name = '1215.TW'#'ACGL'
+	file_path = 'stocks/{}.csv'.format(stock_name)
 	#print (len(t.crawl_price(stock_name)))
 	#data = yf.download("{}".format(stock_name[0:stock_name.find('.')]), start="1960-01-01", end="2019-09-13")
 	#data.to_csv(file_path)

@@ -3,7 +3,6 @@
 # analysis_statement當做基本面filter
 # 將通過analysis_statement當做基本面filter的股票下載yahoo finance的.csv
 # 再算get_supporting_point
-# 繼續把皓謙講的做完
 
 # https://github.com/dsmbgu8/image_annotate.py/issues/4
 # echo "backend: TkAgg" >> ~/.matplotlib/matplotlibrc
@@ -82,7 +81,8 @@ class Trader(object):
 
 	def get_supporting_point(self, stock_name, file_path):
 		print ('stock_name: {}'.format(stock_name))
-		stock_dict_sum = {'topk_vol':[],'supported_point':{},'moving_average':{}, 'MA_state_dict':{}}
+		stock_dict_sum = {'topk_vol':[],'supported_point':{},\
+							'moving_average':{}, 'MA_state_dict':{}, 'KD':{}}
 		#stock_dict_sum = {'moving_average':{}}
 		stock_dict = {}
 		stock_close_list = []
@@ -124,18 +124,6 @@ class Trader(object):
 		#print (stock_name, 'get_supporting_point')
 		topk_volume_list = [0]*self.part_num
 		for key in stock_dict_sum.keys():
-			if key == 'KD':
-				for idx in range(len(stock_close_list)-self.ma_days, len(stock_close_list)):
-					n_stock_low = min(stock_low_list[idx-self.nKD+1:idx+1])
-					n_stock_high = max(stock_low_list[idx-self.nKD+1:idx+1])
-					close = stock_close_list[idx]
-					RSV = 100 * ((close-n_stock_low)/(close-n_stock_high))
-					# 1 2 3 4 5 6 7 8 len=8 [3:8]->[idx-ma+1:idx+1]
-					MA5 = round(sum(stock_close_list[idx-5+1:idx+1]) / 5.0, 2)
-					MA20 = round(sum(stock_close_list[idx-20+1:idx+1]) / 20.0, 2)
-					MA40 = round(sum(stock_close_list[idx-40+1:idx+1]) / 40.0, 2)
-					MA80 = round(sum(stock_close_list[idx-80+1:idx+1]) / 80.0, 2)
-
 			if key == 'topk_vol':
 				# topk volume
 				#topk_volume_list = [0]*self.part_num
@@ -432,13 +420,45 @@ class Trader(object):
 
 					MA40_last, MA80_last, = MA40, MA80
 
-
-
 				#print (MA_dict_all)
 				stock_dict_sum['moving_average'] = MA_dict_all
 				stock_dict_sum['MA_state_dict'] = MA_state_dict
 
-		print (stock_dict_sum)
+			if key == 'KD':
+#				x_list = []
+#				y_list = []
+#				import numpy as np
+#				import pandas as pd
+#				import matplotlib.pyplot as plt
+
+#				K_old, D_old = 0.0, 0.0
+#				yk_list = []
+#				yd_list = []
+				for idx in range(self.nKD-1, len(stock_close_list)):
+					n_stock_low = min(stock_low_list[idx-self.nKD+1:idx+1])
+					n_stock_high = max(stock_high_list[idx-self.nKD+1:idx+1])
+					close = stock_close_list[idx]
+					RSV = 100.0 * ((close-n_stock_low)/(n_stock_high-n_stock_low))
+					K_new = (2 * K_old / 3) + (RSV / 3)
+					D_new = (2 * D_old / 3) + (K_new / 3)
+					K_old, D_old = K_new, D_new
+					if stock_date_list[idx] in stock_dict_sum['moving_average'].keys():
+						data = stock_date_list[idx]
+						stock_dict_sum['moving_average'][data]['K'] = K_new
+						stock_dict_sum['moving_average'][data]['D'] = D_new
+#					if not (len(stock_close_list)-idx) < 70:
+#						continue
+#					x_list.append(idx)
+#					yk_list.append(K_old)
+#					yd_list.append(D_old)
+#					x_val = np.asarray(x_list)
+#					yk_a = np.asarray(yk_list)
+#					yd_a = np.asarray(yd_list)
+#		plt.plot(x_val, yk_a)
+#		plt.plot(x_val, yd_a)
+#		plt.show()
+
+		print (stock_dict_sum['moving_average'])
 				
 
 
@@ -647,7 +667,7 @@ def get_stock_name_list():
 		stock_name_list.append(stock_dict['Ticker'])
 	return stock_name_list
 
-def main_temp():
+def main_test():
 	period_days = 5
 	difference_rate = 0.1
 	stock_folder_path = 'stocks'
@@ -658,6 +678,10 @@ def main_temp():
 	#print (len(t.crawl_price(stock_name)))
 	#data = yf.download("{}".format(stock_name[0:stock_name.find('.')]), start="1960-01-01", end="2019-09-13")
 	#data.to_csv(file_path)
+
+	sav_csv_path = '{}.csv'.format(os.path.join(t.stock_folder_path, stock_name))
+	df = t.crawl_price(stock_name)
+
 	t.get_supporting_point(stock_name, file_path)
 
 
@@ -665,4 +689,4 @@ def main_temp():
 
 if __name__ == '__main__':
 	#main()
-	main_temp()
+	main_test()

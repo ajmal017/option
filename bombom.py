@@ -357,14 +357,17 @@ class Trader(object):
 				MA40_state = 0
 				MA80_state = 0
 				change_state = False
+				MA40_change_state, MA80_change_state = False, False
 				for idx in range(len(stock_close_list)-1, len(stock_close_list)-self.ma_days, -1):
+					#print (len(stock_close_list)-1, len(stock_close_list)-self.ma_days, -1)
+					#print (idx)
 					close = stock_close_list[idx]
 					# 1 2 3 4 5 6 7 8 len=8 [3:8]->[idx-ma+1:idx+1]
 					MA5 = round(sum(stock_close_list[idx-5+1:idx+1]) / 5.0, 2)
 					MA20 = round(sum(stock_close_list[idx-20+1:idx+1]) / 20.0, 2)
 					MA40 = round(sum(stock_close_list[idx-40+1:idx+1]) / 40.0, 2)
 					MA80 = round(sum(stock_close_list[idx-80+1:idx+1]) / 80.0, 2)
-
+					#print (MA5, MA20, MA40, MA80)
 					situation_type = 'big_cow' if MA5 > MA20 > MA40 > MA80 else 'small_cow' if MA40 > MA80 \
 									else 'big_bear' if MA5 < MA20 < MA40 < MA80 else 'small_bear'
 					MA_dict = {'situation_type': situation_type, \
@@ -375,28 +378,38 @@ class Trader(object):
 								'MA80': MA80 }
 					MA_dict_all['{}'.format(stock_date_list[idx])] = MA_dict
 					
+					
+
 					if first_enter:
 						first_enter = False
 					else:
 						MA40_state = 1 if MA40 > MA40_last else -1
 						MA80_state = 1 if MA80 > MA80_last else -1
 						if MA_state_dict == {}:
-							MA_state_dict = {'MA40_state': 0, 'MA80_state': 0}
+							MA_state_dict = {'MA40_state_keep': 0, 'MA80_state_keep': 0}
 
 						else:
-							MA40_change_state = False if MA40_state_last == MA40_state else True
-							MA80_change_state = False if MA80_state_last == MA80_state else True
-							if MA40_change_state:
-								MA_state_dict['MA40_state'] += 1
+							MA40_change_state = False if ((MA40_state_last == MA40_state) and (MA40_change_state == False)) else True
+							MA80_change_state = False if ((MA80_state_last == MA80_state) and (MA80_change_state == False)) else True
+							if not MA40_change_state:
+								MA_state_dict['MA40_state_keep'] += 1
 							else:
 								MA40_change_state = True
 
-							if MA80_change_state:
-								MA_state_dict['MA80_state'] += 1
+							if not MA80_change_state:
+								MA_state_dict['MA80_state_keep'] += 1
 							else:
 								MA80_change_state = True
+						#try:
+						#	print (MA40, MA40_last, MA40_state, MA40_state_last, MA40_change_state)
+						#	print (MA80, MA80_last, MA80_state, MA80_state_last, MA80_change_state)
+						#	print ((MA40_state_last == MA40_state), (MA40_change_state == False))
+						#	input('wait')
+						#except:
+						#	pass
 						MA40_state_last = MA40_state
 						MA80_state_last = MA80_state
+
 					MA40_last, MA80_last, = MA40, MA80
 
 
@@ -620,9 +633,9 @@ def main_temp():
 	stock_folder_path = 'stocks'
 	roe_ttm = 1
 	t = Trader(period_days, difference_rate, stock_folder_path, roe_ttm)
-	stock_name = 'ACAM'
-	file_path = '/Users/Wiz/Desktop/option/stocks/ACAM.csv'
-	print (len(t.crawl_price(stock_name)))
+	stock_name = 'ACGL'
+	file_path = '/Users/Wiz/Desktop/option/stocks/ACGL.csv'
+	#print (len(t.crawl_price(stock_name)))
 	#data = yf.download("{}".format(stock_name[0:stock_name.find('.')]), start="1960-01-01", end="2019-09-13")
 	#data.to_csv(file_path)
 	t.get_supporting_point(stock_name, file_path)

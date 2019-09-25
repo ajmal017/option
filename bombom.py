@@ -7,6 +7,16 @@
 # https://github.com/dsmbgu8/image_annotate.py/issues/4
 # echo "backend: TkAgg" >> ~/.matplotlib/matplotlibrc
 
+# 20190925
+# 1.
+# stress要取區間value*volume
+# 2.
+# 加上Stress,close%	stress/hold（put顯示stress > strike、call顯示stress < strike）
+# put看支撐, call看壓力
+# put 是不希望跌到你的strike，所以要找一個option 有一個hold 高於strike，表示當股價跌到hold 有撐，不容易讓你履約
+# 3.
+# 總表
+
 import sys
 #sys.path.insert(0, '/home/ckwang/.local/lib/python2.7/site-packages')
 #sys.path.insert(0, '/usr/local/lib/python3.5/dist-packages')
@@ -90,7 +100,7 @@ class Trader(object):
 		lasted_date = list(result_all['moving_average'].keys())[0]
 		lasted_close = result_all['moving_average'][lasted_date]['close']
 		lasted_situation_type = result_all['moving_average'][lasted_date]['situation_type']
-		
+		print (result_all['pressed_point'])
 		with open(options_file_path, 'w', newline='') as csvfile:
 			writer = csv.writer(csvfile)
 			writer.writerow(['type', 'date', 'contractSymbol', 'strike', 'bid', \
@@ -134,7 +144,7 @@ class Trader(object):
 
 	def get_supporting_point(self, stock_name, file_path):
 		print ('stock_name: {}'.format(stock_name))
-		stock_dict_sum = {'topk_vol':[],'supported_point':{},\
+		stock_dict_sum = {'topk_vol':[],'supported_point':{},'pressed_point':{},\
 							'moving_average':{}, 'MA_state_dict':{}, 'KD':{}}
 		#stock_dict_sum = {'moving_average':{}}
 		stock_dict = {}
@@ -727,7 +737,7 @@ def main_test():
 	stock_folder_path = 'stocks'
 	roe_ttm = 1
 	t = Trader(period_days, difference_rate, stock_folder_path, roe_ttm)
-	#stock_name = '1215.TW'#'ACGL'
+	#stock_name = '2330.TW'#'ACGL'
 	stock_name = 'ACGL'#''
 	file_path = 'stocks/{}.csv'.format(stock_name)
 	options_file_path = 'options/{}.csv'.format(stock_name)

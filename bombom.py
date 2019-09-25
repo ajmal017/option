@@ -28,6 +28,10 @@ import finviz
 import copy
 import requests
 import pandas as pd
+
+import yfinance as yf
+import csv
+
 #print (finviz.get_stock('AMD'))
 #assert False
 # Optionable
@@ -77,7 +81,35 @@ class Trader(object):
 		self.ma_days = 200
 		self.nKD = 9
 
-#
+	def get_contract(self, stock_name):
+		stock_ticker = yf.Ticker(stock_name)
+		stock_ticker.options
+
+	def output_report(stock_name, options_file_path, result_all):
+		stock_ticker = yf.Ticker(stock_name)
+		date_tuple = stock_ticker.options
+
+		with open(options_file_path, 'w', newline='') as csvfile:
+			writer = csv.writer(csvfile)
+			writer.writerow(['type', 'date', 'strike', 'bid', 'ask', 'bid/strike', \
+				'vol', 'avg_vol', '|1-(strike/close)|', 'Change', 'MA5', 'MA20', \
+				'MA40', 'MA80', 'MA40_state', 'MA80_state', 'k', 'd'])
+			for date in date_tuple:
+				for opts in stock_ticker.option_chain(date):
+					opts_dict = opts.to_dict()
+					print (opts_dict)
+					input('wait')
+		
+# type date strike bid ask bid/strike vol  Change MA5 MA20 MA40 MA80 MA40_state MA80_state k d
+
+			
+
+			# 寫入一列資料
+
+
+			# 寫入另外幾列資料
+			#writer.writerow(['令狐沖', 175, 60])
+
 
 	def get_supporting_point(self, stock_name, file_path):
 		print ('stock_name: {}'.format(stock_name))
@@ -459,7 +491,7 @@ class Trader(object):
 #		plt.show()
 
 		print (stock_dict_sum['moving_average'])
-				
+		return stock_dict_sum
 
 
 # 用基本面篩選
@@ -564,6 +596,7 @@ class Trader(object):
 			if len(df) < self.ma_days:
 				continue
 			self.get_supporting_point(stock_name, sav_csv_path)
+			self.get_contract(stock_name)
 			print ('worker number {}, stock_name is {}'.format(workers_num, stock_name))
 			#time.sleep(1)
 
@@ -675,6 +708,7 @@ def main_test():
 	t = Trader(period_days, difference_rate, stock_folder_path, roe_ttm)
 	stock_name = '1215.TW'#'ACGL'
 	file_path = 'stocks/{}.csv'.format(stock_name)
+	options_file_path = 'options/{}.csv'.format(stock_name)
 	#print (len(t.crawl_price(stock_name)))
 	#data = yf.download("{}".format(stock_name[0:stock_name.find('.')]), start="1960-01-01", end="2019-09-13")
 	#data.to_csv(file_path)
@@ -682,9 +716,11 @@ def main_test():
 	sav_csv_path = '{}.csv'.format(os.path.join(t.stock_folder_path, stock_name))
 	df = t.crawl_price(stock_name)
 
-	t.get_supporting_point(stock_name, file_path)
+	result_all = t.get_supporting_point(stock_name, file_path)
+	t.output_report(stock_name, options_file_path, result_all)
 
-
+# sp + bp
+# type date strike bid ask bid/strike vol |1-(close/strike)| Change MA5 MA20 MA40 MA80 MA40_state MA80_state k d
 
 
 if __name__ == '__main__':

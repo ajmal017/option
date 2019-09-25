@@ -85,22 +85,43 @@ class Trader(object):
 		stock_ticker = yf.Ticker(stock_name)
 		stock_ticker.options
 
-	def output_report(stock_name, options_file_path, result_all):
-		stock_ticker = yf.Ticker(stock_name)
-		date_tuple = stock_ticker.options
-
+	def output_report(self, stock_name, options_file_path, result_all):
+		#print (result_all)
+		lasted_date = list(result_all['moving_average'].keys())[0]
+		lasted_close = result_all['moving_average'][lasted_date]['close']
+		lasted_situation_type = result_all['moving_average'][lasted_date]['situation_type']
+		
 		with open(options_file_path, 'w', newline='') as csvfile:
 			writer = csv.writer(csvfile)
-			writer.writerow(['type', 'date', 'strike', 'bid', 'ask', 'bid/strike', \
-				'vol', 'avg_vol', '|1-(strike/close)|', 'Change', 'MA5', 'MA20', \
-				'MA40', 'MA80', 'MA40_state', 'MA80_state', 'k', 'd'])
-			for date in date_tuple:
-				for opts in stock_ticker.option_chain(date):
+			writer.writerow(['type', 'date', 'contractSymbol', 'strike', 'bid', \
+				'ask', 'bid/strike', 'vol', 'avg_vol', '|1-(strike/close)|', \
+				'Change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state', \
+				'MA80_state', 'situation_type', 'k', 'd'])
+			stock_ticker = yf.Ticker(stock_name)
+			for date in stock_ticker.options:
+				for idx, opts in enumerate(stock_ticker.option_chain(date)):
+					typ = 'call' if idx == 0 else 'put'
 					opts_dict = opts.to_dict()
 					print (opts_dict)
-					input('wait')
+					for idx in opts_dict['contractSymbol'].keys():
+						#opt = opts_dict[key][idx]
+						writer.writerow([typ, date, opts_dict['contractSymbol'][idx], \
+							opts_dict['strike'][idx], opts_dict['bid'][idx], opts_dict['ask'][idx], \
+							round(opts_dict['bid'][idx]/opts_dict['strike'][idx], 3), opts_dict['volume'][idx], '-1', \
+							round(abs(1-(opts_dict['strike'][idx]/lasted_close)), 3), \
+							opts_dict['change'][idx], result_all['moving_average'][lasted_date]['MA5'], \
+							result_all['moving_average'][lasted_date]['MA20'], \
+							result_all['moving_average'][lasted_date]['MA40'], \
+							result_all['moving_average'][lasted_date]['MA80'], \
+							result_all['MA_state_dict']['MA40_state_keep'], \
+							result_all['MA_state_dict']['MA80_state_keep'], lasted_situation_type, \
+							round(result_all['moving_average'][lasted_date]['K'], 3), \
+							round(result_all['moving_average'][lasted_date]['D'], 3)])
+					
+					#print (opts_dict)
+		input('wait')
 		
-# type date strike bid ask bid/strike vol  Change MA5 MA20 MA40 MA80 MA40_state MA80_state k d
+# type date contractSymbol strike bid ask bid/strike vol  Change MA5 MA20 MA40 MA80 MA40_state MA80_state k d
 
 			
 
@@ -463,7 +484,7 @@ class Trader(object):
 #				import pandas as pd
 #				import matplotlib.pyplot as plt
 
-#				K_old, D_old = 0.0, 0.0
+				K_old, D_old = 0.0, 0.0
 #				yk_list = []
 #				yd_list = []
 				for idx in range(self.nKD-1, len(stock_close_list)):
@@ -490,7 +511,7 @@ class Trader(object):
 #		plt.plot(x_val, yd_a)
 #		plt.show()
 
-		print (stock_dict_sum['moving_average'])
+		#print (stock_dict_sum['moving_average'])
 		return stock_dict_sum
 
 
@@ -706,7 +727,8 @@ def main_test():
 	stock_folder_path = 'stocks'
 	roe_ttm = 1
 	t = Trader(period_days, difference_rate, stock_folder_path, roe_ttm)
-	stock_name = '1215.TW'#'ACGL'
+	#stock_name = '1215.TW'#'ACGL'
+	stock_name = 'ACGL'#''
 	file_path = 'stocks/{}.csv'.format(stock_name)
 	options_file_path = 'options/{}.csv'.format(stock_name)
 	#print (len(t.crawl_price(stock_name)))

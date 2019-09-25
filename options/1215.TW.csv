@@ -1,1 +1,0 @@
-type,date,contractSymbol,strike,bid,ask,bid/strike,vol,avg_vol,|1-(strike/close)|,Change,MA5,MA20,MA40,MA80,MA40_state,MA80_state,situation_type,k,d

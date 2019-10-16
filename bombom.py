@@ -8,14 +8,16 @@
 # echo "backend: TkAgg" >> ~/.matplotlib/matplotlibrc
 
 # 20190925
-# 1.
-# stress要取區間value*volume
+#ok 1.
+#ok stress要取區間value*volume
 # 2.
 # 加上Stress,close%	stress/hold（put顯示stress > strike、call顯示stress < strike）
 # put看支撐, call看壓力
 # put 是不希望跌到你的strike，所以要找一個option 有一個hold 高於strike，表示當股價跌到hold 有撐，不容易讓你履約
 # 3.
 # 總表
+#ok 4.
+#ok MA40、MA80 state
 
 import sys
 #sys.path.insert(0, '/home/ckwang/.local/lib/python2.7/site-packages')
@@ -82,7 +84,7 @@ class Trader(object):
 	def __init__(self, period_days, difference_rate, stock_folder_path, roe_ttm):
 		self.stock_name = -1
 		self.period_days = period_days
-		self.difference_rate = 0.05#difference_rate
+		self.difference_rate = 0.1#difference_rate
 		self.roe_ttm = roe_ttm
 		self.stock_folder_path = stock_folder_path
 		self.value_group = -1
@@ -106,7 +108,8 @@ class Trader(object):
 			writer.writerow(['type', 'date', 'contractSymbol', 'strike', 'bid', \
 				'ask', 'bid/strike', 'vol', 'avg_vol', '|1-(strike/close)|', \
 				'Change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state', \
-				'MA80_state', 'situation_type', 'k', 'd'])
+				'MA80_state', 'MA40_state_keep', \
+				'MA80_state_keep', 'situation_type', 'k', 'd'])
 			stock_ticker = yf.Ticker(stock_name)
 			for date in stock_ticker.options:
 				for idx, opts in enumerate(stock_ticker.option_chain(date)):
@@ -123,6 +126,8 @@ class Trader(object):
 							result_all['moving_average'][lasted_date]['MA20'], \
 							result_all['moving_average'][lasted_date]['MA40'], \
 							result_all['moving_average'][lasted_date]['MA80'], \
+							result_all['MA_state_dict']['MA40_state'], \
+							result_all['MA_state_dict']['MA80_state'], \
 							result_all['MA_state_dict']['MA40_state_keep'], \
 							result_all['MA_state_dict']['MA80_state_keep'], lasted_situation_type, \
 							round(result_all['moving_average'][lasted_date]['K'], 3), \
@@ -140,7 +145,6 @@ class Trader(object):
 
 			# 寫入另外幾列資料
 			#writer.writerow(['令狐沖', 175, 60])
-
 
 	def get_supporting_point(self, stock_name, file_path):
 		print ('stock_name: {}'.format(stock_name))
@@ -212,7 +216,7 @@ class Trader(object):
 					if idx < self.period_days or idx+self.period_days > len(stock_close_list):
 						continue
 					Close_five_days_pass_min = min(stock_close_list[idx-self.period_days:idx])
-					if not Close > Close_five_days_pass_min*1.1:
+					if not Close > Close_five_days_pass_min*(1+self.difference_rate):
 						continue
 					Close_five_days_pass_max = max(stock_close_list[idx-self.period_days:idx])
 					if not Close > Close_five_days_pass_max:
@@ -221,7 +225,7 @@ class Trader(object):
 					if not Close > Close_five_days_next_max:
 						continue
 					Close_five_days_next_min = min(stock_close_list[idx+1:idx+1+self.period_days])
-					if not Close > Close_five_days_next_min*1.1:
+					if not Close > Close_five_days_next_min*(1+self.difference_rate):
 						continue
 					#print (idx, Close)
 					press_dict = {'Date': stock_date_list[idx],
@@ -237,7 +241,7 @@ class Trader(object):
 						continue
 
 					Close_five_days_pass_min = min(stock_close_list[idx-self.period_days:idx])
-					if not Close > Close_five_days_pass_min*1.1:
+					if not Close > Close_five_days_pass_min*(1+self.difference_rate):
 						continue
 					Close_five_days_pass_max = max(stock_close_list[idx-self.period_days:idx])
 					if not Close > Close_five_days_pass_max:
@@ -246,11 +250,15 @@ class Trader(object):
 					if not Close > Close_five_days_next_max:
 						continue
 					Close_five_days_next_min = min(stock_close_list[idx+1:idx+1+self.period_days])
-					if not Close > Close_five_days_next_min*1.1:
+					if not Close > Close_five_days_next_min*(1+self.difference_rate):
 						continue
+					# 在這邊要加總
 					#print (idx, Close)
+					Volume_Value = self.find_min_idx_in_interval(stock_close_list[idx-self.period_days:idx+1+self.period_days], \
+													idx, Close_five_days_pass_min, Close_five_days_next_min, \
+													stock_dict, stock_date_list)
 					press_dict = {'Date': stock_date_list[idx],
-									'Volume_Value': Close*stock_dict[stock_date_list[idx]]['Volume'],
+									'Volume_Value': Volume_Value,
 									'Volume': stock_dict[stock_date_list[idx]]['Volume'],
 									'Close': Close}
 					press_list.append(press_dict)
@@ -260,11 +268,10 @@ class Trader(object):
 				Volume_max = -1
 				press_all_dict = {}
 				topk_volume_all_dict = {}
-				for num in range(self.part_num):
+				for num in range(self.part_num+1):
 					press_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] = 0
 					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] = 0
 				
-
 				for press_dict_tmp in press_list:
 					num = int(press_dict_tmp['Close'] / self.interval_value)
 					press_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] \
@@ -329,8 +336,12 @@ class Trader(object):
 					if not Close < Close_five_days_next_min:
 						continue
 					#print (idx, Close)
+					Volume_Value = self.find_max_idx_in_interval(stock_close_list[idx-self.period_days:idx+1+self.period_days], \
+													idx, Close_five_days_pass_max, Close_five_days_next_max, \
+													stock_dict, stock_date_list)
+
 					support_dict = {'Date': stock_date_list[idx],
-									'Volume_Value': Close*stock_dict[stock_date_list[idx]]['Volume'],
+									'Volume_Value': Volume_Value,
 									'Volume': stock_dict[stock_date_list[idx]]['Volume'],
 									'Close': Close}
 					#Volume_Value_max = Close*stock_dict[stock_date_list[idx]]['Volume'] if Close*stock_dict[stock_date_list[idx]]['Volume'] > Volume_Value_max else Volume_Value_max
@@ -342,7 +353,7 @@ class Trader(object):
 				Volume_max = -1
 				support_all_dict = {}
 				topk_volume_all_dict = {}
-				for num in range(self.part_num):
+				for num in range(self.part_num+1):
 					support_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] = 0
 					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] = 0
 				
@@ -449,8 +460,6 @@ class Trader(object):
 								'MA80': MA80 }
 					MA_dict_all['{}'.format(stock_date_list[idx])] = MA_dict
 					
-					
-
 					if first_enter:
 						first_enter = False
 					else:
@@ -484,8 +493,11 @@ class Trader(object):
 					MA40_last, MA80_last, = MA40, MA80
 
 				#print (MA_dict_all)
+				MA_state_dict['MA40_state'] = MA40_state
+				MA_state_dict['MA80_state'] = MA80_state
 				stock_dict_sum['moving_average'] = MA_dict_all
 				stock_dict_sum['MA_state_dict'] = MA_state_dict
+
 
 			if key == 'KD':
 #				x_list = []
@@ -524,6 +536,37 @@ class Trader(object):
 		#print (stock_dict_sum['moving_average'])
 		return stock_dict_sum
 
+	@staticmethod
+	def find_min_idx_in_interval(temp_list, idx, min_pass, min_next, stock_dict, stock_date_list):
+		#Input:
+		#	temp_list: the close_list from 5 days ago ~ 5 days next
+		#	idx: main idx(today's idx)
+		#	max & min: the max & min close from 5 days ago ~ 5 days next
+		#Output:
+		#	max & min idx
+		stock_close_volume_sum = 0
+		start = temp_list.index(min_pass)
+		end = temp_list.index(min_next)
+		for index in range(start, end+1):
+			stock_close_volume_sum+=temp_list[index]*stock_dict[stock_date_list[index]]['Volume']
+			#print ('find_min_idx_in_interval', stock_close_volume_sum)
+		return stock_close_volume_sum
+
+	@staticmethod
+	def find_max_idx_in_interval(temp_list, idx, max_pass, max_next, stock_dict, stock_date_list):
+		#Input:
+		#	temp_list: the close_list from 5 days ago ~ 5 days next
+		#	idx: main idx(today's idx)
+		#	max & min: the max & min close from 5 days ago ~ 5 days next
+		#Output:
+		#	max & min idx
+		stock_close_volume_sum = 0
+		start = temp_list.index(max_pass)
+		end = temp_list.index(max_next)
+		for index in range(start, end+1):
+			stock_close_volume_sum+=temp_list[index]*stock_dict[stock_date_list[index]]['Volume']
+			#print ('find_max_idx_in_interval', stock_close_volume_sum)
+		return stock_close_volume_sum
 
 # 用基本面篩選
 # MA 40 80負斜率持續 70天就不要
@@ -731,14 +774,165 @@ def get_stock_name_list():
 		stock_name_list.append(stock_dict['Ticker'])
 	return stock_name_list
 
+#type date contractSymbol strike bid ask bid/strike vol avg_vol |1-(strike/close)| Change 
+#MA5 MA20 MA40 MA80 MA40_state MA80_state MA40_state_keep MA80_state_keep situation_type k d
+
+# type：call買權 put賣
+# date：2019-10-18
+# contractSymbol：ACGL191018C00035000
+# strike：履約價
+# bid：你要賣出選擇權所得的價格
+# ask：你要購買選擇權所需花費的價格，
+# bid/strike
+# vol：該合約的交易量
+# point：如果是SP（牛市）就是supported point，就是顯示出最大價量點x_max，以及 > 0.5x_max的所有價量點
+# 1-(point/close)：如果是SP（牛市）看現在的close離point多遠，如果為負就是close<point，越負close跌越多，如果為正就是close>point，越正close離支撐點越遠
+# max_risk：
+# change：當天漲幅％
+# MA5 MA20 MA40 MA80
+# MA40_state MA80_state：1上升、-1下跌
+# MA40_state_keep MA80_state_keep：MAXX_state維持了幾個交易日
+# situation_type：'big_cow' if MA5 > MA20 > MA40 > MA80 else 'small_cow' if MA40 > MA80 else 'big_bear' if MA5 < MA20 < MA40 < MA80 else 'small_bear'
+# k、d
+def gui():
+	from tkinter import ttk
+	from tkinter import Tk, LEFT, BOTH
+	root = Tk()  # 初始框的声明
+	columns = ("姓名", "IP地址")
+	treeview = ttk.Treeview(root, height=18, show="headings", columns=columns)  # 表格
+
+	treeview.column("姓名", width=100, anchor='center') # 表示列,不显示
+	treeview.column("IP地址", width=300, anchor='center')
+
+	treeview.heading("姓名", text="姓名") # 显示表头
+	treeview.heading("IP地址", text="IP地址")
+
+	treeview.pack(side=LEFT, fill=BOTH)
+
+	name = ['电脑1','服务器','笔记本']
+	ipcode = ['10.13.71.223','10.25.61.186','10.25.11.163']
+	for i in range(min(len(name),len(ipcode))): # 写入数据
+		treeview.insert('', i, values=(name[i], ipcode[i]))
+
+
+	def delButton(tree):
+		x=tree.get_children()
+		for item in x:
+			tree.delete(item)
+	
+
+	def treeview_sort_column(tv, col, reverse):  # Treeview、列名、排列方式
+	    l = [(tv.set(k, col), k) for k in tv.get_children('')]
+	    l.sort(reverse=reverse)  # 排序方式
+	    # rearrange items in sorted positions
+	    for index, (val, k) in enumerate(l):  # 根据排序后索引移动
+	        tv.move(k, '', index)
+	    tv.heading(col, command=lambda: treeview_sort_column(tv, col, not reverse))  # 重写标题，使之成为再点倒序的标题
+	 
+	def set_cell_value(event): # 双击进入编辑状态
+		for item in treeview.selection():
+			#item = I001
+			item_text = treeview.item(item, "values")
+			#print(item_text[0:2])  # 输出所选行的值
+		column= treeview.identify_column(event.x)# 列
+		row = treeview.identify_row(event.y)  # 行
+		cn = int(str(column).replace('#',''))
+		rn = int(str(row).replace('I',''))
+		entryedit = Text(root,width=10+(cn-1)*16,height = 1)
+		entryedit.place(x=16+(cn-1)*130, y=6+rn*20)
+		def saveedit():
+			treeview.set(item, column=column, value=entryedit.get(0.0, "end"))
+			entryedit.destroy()
+			okb.destroy()
+		okb = ttk.Button(root, text='OK', width=4, command=saveedit)
+		okb.place(x=90+(cn-1)*242,y=2+rn*20)
+	 
+	#def newrow():
+	#	name.append('待命名')
+	#	ipcode.append('IP')
+	#	treeview.insert('', len(name)-1, values=(name[len(name)-1], ipcode[len(name)-1]))
+	#	treeview.update()
+	#	newb.place(x=120, y=(len(name)-1)*20+45)
+	#	newb.update()
+	 
+	#treeview.bind('<Double-1>', set_cell_value) # 双击左键进入编辑
+	#newb = ttk.Button(root, text='新建联系人', width=20, command=newrow)
+	#newb.place(x=120,y=(len(name)-1)*20+45)
+	 
+	while True:
+		for col in columns:  # 绑定函数，使表头可排序
+			treeview.heading(col, text=col, command=lambda _col=col: treeview_sort_column(treeview, _col, False))
+
+		input('1')
+
+		delButton(treeview)
+
+		input('2')
+
+		for i in range(min(len(name),len(ipcode))): # 写入数据
+			treeview.insert('', i, values=(name[i], ipcode[i]))
+
+		input('3')
+	root.mainloop()
+
+def gui_old():
+	import tkinter
+	from tkinter import ttk  # 导入内部包
+	import time
+
+	def add_context():
+		li = ['王记','{}'.format(time.time()),'男']
+		root = tkinter.Tk()
+		root.title('测试')
+		tree = ttk.Treeview(root,columns=['1','2','3'],show='headings')
+		tree.column('1',width=100,anchor='center')
+		tree.column('2',width=100,anchor='center')
+		tree.column('3',width=100,anchor='center')
+		tree.heading('1',text='姓名')
+		tree.heading('2',text='学号')
+		tree.heading('3',text='性别')
+		tree.insert('','end',values=li)
+		tree.grid()
+
+	def delButton(tree):
+		x=tree.get_children()
+		for item in x:
+			tree.delete(item)
+
+
+	while 1:
+		li = ['王记','{}'.format(time.time()),'男']
+
+		root = tkinter.Tk()
+		root.title('测试')
+
+		tree = ttk.Treeview(root,columns=['1','2','3'],show='headings')
+		tree.column('1',width=100,anchor='center')
+		tree.column('2',width=100,anchor='center')
+		tree.column('3',width=100,anchor='center')
+		tree.heading('1',text='姓名')
+		tree.heading('2',text='学号')
+		tree.heading('3',text='性别')
+		tree.insert('','end',values=li)
+		tree.grid()
+		input('wait')
+		delButton(tree)
+		del root
+	#delButton(tree)
+	 
+	#root.mainloop()
+
+
 def main_test():
+	#gui()
+	#assert False
 	period_days = 5
 	difference_rate = 0.1
 	stock_folder_path = 'stocks'
 	roe_ttm = 1
 	t = Trader(period_days, difference_rate, stock_folder_path, roe_ttm)
 	#stock_name = '2330.TW'#'ACGL'
-	stock_name = 'ACGL'#''
+	stock_name = 'AKAM'#''
 	file_path = 'stocks/{}.csv'.format(stock_name)
 	options_file_path = 'options/{}.csv'.format(stock_name)
 	#print (len(t.crawl_price(stock_name)))

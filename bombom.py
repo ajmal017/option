@@ -98,17 +98,28 @@ class Trader(object):
 		stock_ticker.options
 
 	def output_report(self, stock_name, options_file_path, result_all):
-		#print (result_all)
 		lasted_date = list(result_all['moving_average'].keys())[0]
-		lasted_close = result_all['moving_average'][lasted_date]['close']
+		lasted_close = float(result_all['moving_average'][lasted_date]['close'])
 		lasted_situation_type = result_all['moving_average'][lasted_date]['situation_type']
+		point_string = ''
+		# 1-(point/close)
+		if 'cow' in lasted_situation_type:
+			for interval_dict in result_all['supported_point']:
+				if interval_dict['topk_volume'] < 0.5:
+					break
+				point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], 2), round(1-(float(interval_dict['Interval'].split('_')[1])/lasted_close), 2))
+		else:
+			for interval_dict in result_all['pressed_point']:
+				if interval_dict['topk_volume'] < 0.5:
+					break
+				point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], 2), round(1-(float(interval_dict['Interval'].split('_')[0])/lasted_close), 2))
+
 		with open(options_file_path, 'w', newline='') as csvfile:
 			writer = csv.writer(csvfile)
 			writer.writerow(['type', 'date', 'contractSymbol', 'strike', 'bid', \
-				'ask', 'bid/strike', 'vol', 'avg_vol', '|1-(strike/close)|', \
-				'Change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state', \
-				'MA80_state', 'MA40_state_keep', \
-				'MA80_state_keep', 'situation_type', 'k', 'd'])
+				'ask', 'bid/strike', 'vol', 'interval / topk% / 1-(point/close)', \
+				'Change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state(keep)', \
+				'MA80_state(keep)', 'situation_type', 'k', 'd'])
 			stock_ticker = yf.Ticker(stock_name)
 			for date in stock_ticker.options:
 				for idx, opts in enumerate(stock_ticker.option_chain(date)):
@@ -118,16 +129,15 @@ class Trader(object):
 						#opt = opts_dict[key][idx]
 						writer.writerow([typ, date, opts_dict['contractSymbol'][idx], \
 							opts_dict['strike'][idx], opts_dict['bid'][idx], opts_dict['ask'][idx], \
-							round(opts_dict['bid'][idx]/opts_dict['strike'][idx], 3), opts_dict['volume'][idx], '-1', \
-							round(abs(1-(opts_dict['strike'][idx]/lasted_close)), 3), \
+							round(opts_dict['bid'][idx]/opts_dict['strike'][idx], 3), opts_dict['volume'][idx], \
+							point_string, \
 							opts_dict['change'][idx], result_all['moving_average'][lasted_date]['MA5'], \
 							result_all['moving_average'][lasted_date]['MA20'], \
 							result_all['moving_average'][lasted_date]['MA40'], \
 							result_all['moving_average'][lasted_date]['MA80'], \
-							result_all['MA_state_dict']['MA40_state'], \
-							result_all['MA_state_dict']['MA80_state'], \
-							result_all['MA_state_dict']['MA40_state_keep'], \
-							result_all['MA_state_dict']['MA80_state_keep'], lasted_situation_type, \
+							'{}_{}'.format(result_all['MA_state_dict']['MA40_state'], result_all['MA_state_dict']['MA40_state_keep']), \
+							'{}_{}'.format(result_all['MA_state_dict']['MA80_state'], result_all['MA_state_dict']['MA80_state_keep']), \
+							lasted_situation_type, \
 							round(result_all['moving_average'][lasted_date]['K'], 3), \
 							round(result_all['moving_average'][lasted_date]['D'], 3)])
 					
@@ -157,7 +167,7 @@ class Trader(object):
 		stock_date_list = []
 		stock_volume_list = []
 		count = 0
-		interval_value_point = 5
+		interval_value_point = 2
 		Open_last, High_last, Low_last, Close_last, Volume_last = 0, 0, 0, 0, 0
 		with open(file_path, 'r') as file_read:
 			for line in file_read.readlines():
@@ -784,14 +794,17 @@ def get_stock_name_list():
 # bid/strike
 # vol：該合約的交易量
 # point：如果是SP（牛市）就是supported point，就是顯示出最大價量點x_max，以及 > 0.5x_max的所有價量點
-# 1-(point/close)：如果是SP（牛市）看現在的close離point多遠，如果為負就是close<point，越負close跌越多，如果為正就是close>point，越正close離支撐點越遠
-# max_risk：
+# Interval / topk% / 1-(point/close)：如果是SP（牛市）看現在的close離point多遠，如果為負就是close<point，越負close跌越多，如果為正就是close>point，越正close離支撐點越遠
 # change：當天漲幅％
 # MA5 MA20 MA40 MA80
 # MA40_state MA80_state：1上升、-1下跌
 # MA40_state_keep MA80_state_keep：MAXX_state維持了幾個交易日
 # situation_type：'big_cow' if MA5 > MA20 > MA40 > MA80 else 'small_cow' if MA40 > MA80 else 'big_bear' if MA5 < MA20 < MA40 < MA80 else 'small_bear'
 # k、d
+
+# max_risk：(bp_strike - sp_strike + bid - ask) / sp_strike
+# 投報：(bid-ack)/sp_strike
+
 def gui():
 	# autoclicker
 	# https://codereview.stackexchange.com/questions/75710/autoclicker-tkinter-program
@@ -810,7 +823,7 @@ def gui():
 		treeview.heading('{}'.format(item), text='{}'.format(item)) # 显示表头
 
 	treeview.pack(side=LEFT, fill=BOTH)
-	input('wait')
+	#input('wait')
 	while True:
 		#pass
 		name = ['电脑1','服务器','笔记本']
@@ -959,7 +972,10 @@ def gui_old():
 	 
 	#root.mainloop()
 
-
+# ['type', 'date', 'contractSymbol', 'strike', 'bid', \
+#				'ask', 'bid/strike', 'vol', 'interval / topk% / 1-(point/close)', \
+#				'Change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state(keep)', \
+#				'MA80_state(keep)', 'situation_type', 'k', 'd'])
 def main_test():
 	gui()
 	assert False

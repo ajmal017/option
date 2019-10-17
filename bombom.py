@@ -815,9 +815,9 @@ def gui():
 		#pass
 		name = ['电脑1','服务器','笔记本']
 		ipcode = ['10.13.71.223','10.25.61.186','10.25.11.163']
-		for i in range(min(len(name),len(ipcode))): # 写入数据
-			treeview.insert('', i, values=(name[i], ipcode[i]))
-
+		#for i in range(min(len(name),len(ipcode))): # 写入数据
+		#	treeview.insert('', i, values=(name[i], ipcode[i]))
+		#time.sleep(1)
 
 		def delButton(tree):
 			x=tree.get_children()
@@ -895,14 +895,17 @@ def gui():
 				treeview.insert('', i, values=(name[i], time.time()))#ipcode[i]))
 			print ('finish insert')
 			count = 0
+			root.update()
+			time.sleep(2)
 			while count>pow(100, 100):
 				count+=1
 
 
 
 			delButton(treeview)
-
 			root.update()
+
+			
 
 	#		input('3')
 		print ('root.mainloop()1')

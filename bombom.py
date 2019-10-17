@@ -793,24 +793,26 @@ def get_stock_name_list():
 # situation_type：'big_cow' if MA5 > MA20 > MA40 > MA80 else 'small_cow' if MA40 > MA80 else 'big_bear' if MA5 < MA20 < MA40 < MA80 else 'small_bear'
 # k、d
 def gui():
+	# autoclicker
+	# https://codereview.stackexchange.com/questions/75710/autoclicker-tkinter-program
 	from tkinter import ttk
 	from tkinter import Tk, LEFT, BOTH
 	import tkinter as tk 
-	#if 1:
+	root = Tk()
+
+	columns = ('type', 'date', 'contract', 'strike', 'bid', 'ask', 'bid/strike', 'vol', 'point', \
+				'1-(point/close)', 'max_risk', 'change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state', \
+				'MA80_state', 'MA40_state_keep', 'MA80_state_keep', 'situation_type', 'k', 'd')
+	treeview = ttk.Treeview(root, height=18, show="headings", columns=columns)  # 表格
+
+	for item in columns:
+		treeview.column('{}'.format(item), width=50, anchor='center')
+		treeview.heading('{}'.format(item), text='{}'.format(item)) # 显示表头
+
+	treeview.pack(side=LEFT, fill=BOTH)
+	input('wait')
 	while True:
 		#pass
-		root = Tk()  # 初始框的声明
-		columns = ("姓名", "IP地址")
-		treeview = ttk.Treeview(root, height=18, show="headings", columns=columns)  # 表格
-
-		treeview.column("姓名", width=100, anchor='center') # 表示列,不显示
-		treeview.column("IP地址", width=300, anchor='center')
-
-		treeview.heading("姓名", text="姓名") # 显示表头
-		treeview.heading("IP地址", text="IP地址")
-
-		treeview.pack(side=LEFT, fill=BOTH)
-
 		name = ['电脑1','服务器','笔记本']
 		ipcode = ['10.13.71.223','10.25.61.186','10.25.11.163']
 		for i in range(min(len(name),len(ipcode))): # 写入数据
@@ -863,8 +865,8 @@ def gui():
 		 
 		#while True:
 		if 1:
-			for col in columns:  # 绑定函数，使表头可排序
-				treeview.heading(col, text=col, command=lambda _col=col: treeview_sort_column(treeview, _col, False))
+			#for col in columns:  # 绑定函数，使表头可排序
+			#	treeview.heading(col, text=col, command=lambda _col=col: treeview_sort_column(treeview, _col, False))
 
 	#		input('1')
 
@@ -898,19 +900,8 @@ def gui():
 
 
 
-			#delButton(treeview)
-			#time.sleep(10)
-	#		input('2')
+			delButton(treeview)
 
-			e=tk.Entry(root,show=None)  
-			e.pack()
-			def add():
-				delButton(treeview)
-				for i in range(min(len(name),len(ipcode))): # 写入数据
-					treeview.insert('', i, values=(name[i], time.time()))#ipcode[i]))
-
-			#b1=tk.Button(root,text='add',width=15,command=add)
-			#b1.pack()
 			root.update()
 
 	#		input('3')

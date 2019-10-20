@@ -92,6 +92,7 @@ class Trader(object):
 		self.part_num = 100
 		self.ma_days = 200
 		self.nKD = 9
+		self.bid_strike_thre = 0.3
 
 	def get_contract(self, stock_name):
 		stock_ticker = yf.Ticker(stock_name)
@@ -118,7 +119,7 @@ class Trader(object):
 			writer = csv.writer(csvfile)
 			writer.writerow(['type', 'date', 'contractSymbol', 'strike', 'bid', \
 				'ask', 'bid/strike', 'vol', 'interval / topk% / 1-(point/close)', \
-				'Change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state(keep)', \
+				'change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state(keep)', \
 				'MA80_state(keep)', 'situation_type', 'k', 'd'])
 			stock_ticker = yf.Ticker(stock_name)
 			for date in stock_ticker.options:
@@ -276,10 +277,10 @@ class Trader(object):
 				Volume_max = -1
 				press_all_dict = {}
 				topk_volume_all_dict = {}
-				for num in range(self.part_num+1):
+				for num in range(self.part_num+3):
 					press_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] = 0
 					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] = 0
-				
+
 				for press_dict_tmp in press_list:
 					num = int(press_dict_tmp['Close'] / self.interval_value)
 					press_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] \
@@ -361,7 +362,7 @@ class Trader(object):
 				Volume_max = -1
 				support_all_dict = {}
 				topk_volume_all_dict = {}
-				for num in range(self.part_num+1):
+				for num in range(self.part_num+3):
 					support_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] = 0
 					topk_volume_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] = 0
 				
@@ -805,7 +806,7 @@ def get_stock_name_list():
 # max_risk：(bp_strike - sp_strike + bid - ask) / sp_strike
 # 投報：(bid-ack)/sp_strike
 
-def gui():
+def gui(stock_name):
 	# autoclicker
 	# https://codereview.stackexchange.com/questions/75710/autoclicker-tkinter-program
 	from tkinter import ttk
@@ -813,21 +814,37 @@ def gui():
 	import tkinter as tk 
 	root = Tk()
 
-	columns = ('type', 'date', 'contract', 'strike', 'bid', 'ask', 'bid/strike', 'vol', 'point', \
-				'1-(point/close)', 'max_risk', 'change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state', \
-				'MA80_state', 'MA40_state_keep', 'MA80_state_keep', 'situation_type', 'k', 'd')
-	treeview = ttk.Treeview(root, height=18, show="headings", columns=columns)  # 表格
+	#columns = ('type', 'date', 'contract', 'strike', 'bid', 'ask', 'bid/strike', 'vol', 'point', \
+	#	'1-(point/close)', 'max_risk', 'change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state', \
+	#	'MA80_state', 'MA40_state_keep', 'MA80_state_keep', 'situation_type', 'k', 'd')
+
+	columns = ('type', 'date', 'contractSymbol', 'strike', 'bid', 'ask', 'bid/strike', 'vol', \
+				'interval / topk% / 1-(point/close)', 'change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state(keep)', \
+				'MA80_state(keep)', 'situation_type', 'k', 'd')
+	treeview = ttk.Treeview(root, height=50, show="headings", columns=columns)  # 表格
 
 	for item in columns:
-		treeview.column('{}'.format(item), width=50, anchor='center')
+		if item in ['contractSymbol']:
+			width = 200
+		elif item in ['interval / topk% / 1-(point/close)']:
+			width = 800
+		elif item in ['bid/strike']:
+			width = 100
+		elif item in ['date']:
+			width = 110
+		elif item in ['bid', 'ask']:
+			width = 65
+		else:
+			width = 50
+		treeview.column('{}'.format(item), width=width, anchor='center')
 		treeview.heading('{}'.format(item), text='{}'.format(item)) # 显示表头
 
 	treeview.pack(side=LEFT, fill=BOTH)
 	#input('wait')
 	while True:
 		#pass
-		name = ['电脑1','服务器','笔记本']
-		ipcode = ['10.13.71.223','10.25.61.186','10.25.11.163']
+		#name = ['电脑1','服务器','笔记本']
+		#ipcode = ['10.13.71.223','10.25.61.186','10.25.11.163']
 		#for i in range(min(len(name),len(ipcode))): # 写入数据
 		#	treeview.insert('', i, values=(name[i], ipcode[i]))
 		#time.sleep(1)
@@ -891,7 +908,7 @@ def gui():
 			t = Trader(period_days, difference_rate, stock_folder_path, roe_ttm)
 			#stock_name = '2330.TW'#'ACGL'
 
-			stock_name = 'AKAM'#''
+			#stock_name = 'AKAM'#''
 			file_path = 'stocks/{}.csv'.format(stock_name)
 			options_file_path = 'options/{}.csv'.format(stock_name)
 			#print (len(t.crawl_price(stock_name)))
@@ -904,18 +921,39 @@ def gui():
 			result_all = t.get_supporting_point(stock_name, file_path)
 			t.output_report(stock_name, options_file_path, result_all)
 			print ('finish output_report')
-			for i in range(min(len(name),len(ipcode))): # 写入数据
-				treeview.insert('', i, values=(name[i], time.time()))#ipcode[i]))
+
+			name = ['电脑1','服务器','笔记本']
+			ipcode = ['10.13.71.223','10.25.61.186','10.25.11.163']
+			#columns = ('type', 'date', 'contract', 'strike', 'bid', 'ask', 'bid/strike', 'vol', 'point', \
+			#	'1-(point/close)', 'max_risk', 'change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state', \
+			#	'MA80_state', 'MA40_state_keep', 'MA80_state_keep', 'situation_type', 'k', 'd')
+			
+			df = pd.read_csv(options_file_path)
+			delButton(treeview)
+			df_shape = df.shape
+			for num in range(df_shape[0]):
+				row = df[:][num:num+1]
+				if row['bid/strike'].values < t.bid_strike_thre:
+					continue
+				insert_value_list = []
+				for idx, item in enumerate(columns):
+					#input('w1')
+					#print (idx, item, row[item].values)
+					insert_value_list.append(row[item].values)
+					#input('w2')
+					#print (idx, type(idx))
+					#print (insert_value_list)
+				treeview.insert('', num, values=tuple(insert_value_list))#ipcode[i]))
 			print ('finish insert')
 			count = 0
 			root.update()
-			time.sleep(2)
-			while count>pow(100, 100):
-				count+=1
+			time.sleep(1)
+			#while count>pow(100, 100):
+			#	count+=1
 
 
 
-			delButton(treeview)
+			
 			root.update()
 
 			
@@ -977,8 +1015,8 @@ def gui_old():
 #				'Change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state(keep)', \
 #				'MA80_state(keep)', 'situation_type', 'k', 'd'])
 def main_test():
-	gui()
-	assert False
+	#gui()
+	#assert False
 	period_days = 5
 	difference_rate = 0.1
 	stock_folder_path = 'stocks'
@@ -986,7 +1024,7 @@ def main_test():
 	t = Trader(period_days, difference_rate, stock_folder_path, roe_ttm)
 	#stock_name = '2330.TW'#'ACGL'
 	while True:
-		stock_name = 'AKAM'#''
+		stock_name = 'AMD'#''
 		file_path = 'stocks/{}.csv'.format(stock_name)
 		options_file_path = 'options/{}.csv'.format(stock_name)
 		#print (len(t.crawl_price(stock_name)))
@@ -998,7 +1036,7 @@ def main_test():
 
 		result_all = t.get_supporting_point(stock_name, file_path)
 		t.output_report(stock_name, options_file_path, result_all)
-		gui()
+		gui(stock_name)
 		time.sleep(1)
 
 # sp + bp

@@ -44,6 +44,8 @@ import pandas as pd
 import yfinance as yf
 import csv
 
+from finviz.screener import Screener
+
 #print (finviz.get_stock('AMD'))
 #assert False
 # Optionable
@@ -81,18 +83,19 @@ import csv
 #				}
 
 class Trader(object):
-	def __init__(self, period_days, difference_rate, stock_folder_path, roe_ttm):
+	def __init__(self, period_days, difference_rate, stock_folder_path, option_folder_path, roe_ttm):
 		self.stock_name = -1
 		self.period_days = period_days
 		self.difference_rate = 0.1#difference_rate
 		self.roe_ttm = roe_ttm
 		self.stock_folder_path = stock_folder_path
+		self.option_folder_path = option_folder_path
 		self.value_group = -1
 		self.top_volume_num = 10
 		self.part_num = 100
 		self.ma_days = 200
 		self.nKD = 9
-		self.bid_strike_thre = 0.3
+		self.bid_strike_thre = 0.03
 
 	def get_contract(self, stock_name):
 		stock_ticker = yf.Ticker(stock_name)
@@ -291,7 +294,7 @@ class Trader(object):
 					Volume_Value_max = press_dict_val if press_dict_val > Volume_Value_max else Volume_Value_max
 				# second, normalization
 				for press_dict_key in press_all_dict.keys():
-					press_all_dict[press_dict_key] = press_all_dict[press_dict_key] / float(Volume_Value_max)
+					press_all_dict[press_dict_key] = press_all_dict[press_dict_key] / float(Volume_Value_max+0.00000001)
 
 
 				for idx, value in enumerate(topk_volume_list):
@@ -377,7 +380,7 @@ class Trader(object):
 					Volume_Value_max = support_dict_val if support_dict_val > Volume_Value_max else Volume_Value_max
 				# second, normalization
 				for support_dict_key in support_all_dict.keys():
-					support_all_dict[support_dict_key] = support_all_dict[support_dict_key] / float(Volume_Value_max)
+					support_all_dict[support_dict_key] = support_all_dict[support_dict_key] / float(Volume_Value_max+0.00000001)
 
 
 				for idx, value in enumerate(topk_volume_list):
@@ -522,7 +525,7 @@ class Trader(object):
 					n_stock_low = min(stock_low_list[idx-self.nKD+1:idx+1])
 					n_stock_high = max(stock_high_list[idx-self.nKD+1:idx+1])
 					close = stock_close_list[idx]
-					RSV = 100.0 * ((close-n_stock_low)/(n_stock_high-n_stock_low))
+					RSV = 100.0 * ((close-n_stock_low)/(n_stock_high-n_stock_low+0.00000001))
 					K_new = (2 * K_old / 3) + (RSV / 3)
 					D_new = (2 * D_old / 3) + (K_new / 3)
 					K_old, D_old = K_new, D_new
@@ -542,7 +545,7 @@ class Trader(object):
 #		plt.plot(x_val, yd_a)
 #		plt.show()
 
-		#print (stock_dict_sum['moving_average'])
+		#print (stock_dict_sum)
 		return stock_dict_sum
 
 	@staticmethod
@@ -672,16 +675,19 @@ class Trader(object):
 			if not self.analysis_statement(stock_name):
 				continue
 
-			sav_csv_path = '{}.csv'.format(os.path.join(self.stock_folder_path, stock_name))
+			sav_stock_csv_path = '{}.csv'.format(os.path.join(self.stock_folder_path, stock_name))
+			sav_option_csv_path = '{}.csv'.format(os.path.join(self.option_folder_path, stock_name))
 			#data = yf.download("{}".format(stock_name[0:stock_name.find('.')]), start="1960-01-01", end="2020-12-31")
 			#data.to_csv(sav_csv_path)
 			df = self.crawl_price(stock_name)
 			if len(df) < self.ma_days:
 				continue
-			self.get_supporting_point(stock_name, sav_csv_path)
-			self.get_contract(stock_name)
+			result_all = self.get_supporting_point(stock_name, sav_stock_csv_path)
+			self.output_report(stock_name, sav_option_csv_path, result_all)
 			print ('worker number {}, stock_name is {}'.format(workers_num, stock_name))
-			#time.sleep(1)
+
+			#time.sleep(5)
+			stock_queues.put(stock_name)
 
 	@staticmethod
 	def crawl_price(stock_id):
@@ -723,6 +729,7 @@ class Boss(object):
 		with open(config_path,'r') as config_file:
 			config_lines = config_file.readlines()
 			self.stock_folder_path = config_lines[0].strip()
+			self.option_folder_path = config_lines[1].strip()
 			if not os.path.exists(self.stock_folder_path):
 				os.makedirs(self.stock_folder_path)
 			self.num_worker = int(config_lines[2].strip())
@@ -735,7 +742,7 @@ class Boss(object):
 		using multiprocess to process .csv, we will enable self.num_worker thread to process data
 		"""
 		for i in range(self.num_worker):
-			trader = copy.deepcopy(Trader(self.period_days, self.difference_rate, self.stock_folder_path, self.roe_ttm))
+			trader = copy.deepcopy(Trader(self.period_days, self.difference_rate, self.stock_folder_path, self.option_folder_path, self.roe_ttm))
 			print ('worker {}'.format(i))
 			self.workers.append(trader)
 
@@ -758,8 +765,10 @@ def get_args():
 	return parser.parse_args()
 
 def main():
+	get_stock_name_list()
 	param = get_args()
-	boss = Boss(get_stock_name_list())
+	boss = Boss(['{}'.format(stock_name[:-4]) for stock_name in os.listdir('/Users/Wiz/Desktop/option/stocks_old') if not '.' in stock_name[:-4]])
+	#boss = Boss(get_stock_name_list())
 	boss.load_config(param.config_path)
 	boss.hire_worker()
 	boss.assign_task()
@@ -904,8 +913,9 @@ def gui(stock_name):
 			period_days = 5
 			difference_rate = 0.1
 			stock_folder_path = 'stocks'
+			option_folder_path = 'options'
 			roe_ttm = 1
-			t = Trader(period_days, difference_rate, stock_folder_path, roe_ttm)
+			t = Trader(period_days, difference_rate, stock_folder_path, option_folder_path, roe_ttm)
 			#stock_name = '2330.TW'#'ACGL'
 
 			#stock_name = 'AKAM'#''
@@ -933,7 +943,8 @@ def gui(stock_name):
 			df_shape = df.shape
 			for num in range(df_shape[0]):
 				row = df[:][num:num+1]
-				if row['bid/strike'].values < t.bid_strike_thre:
+				#print (row['bid'].values)
+				if row['bid/strike'].values < t.bid_strike_thre or row['bid'].values == 'nan':
 					continue
 				insert_value_list = []
 				for idx, item in enumerate(columns):
@@ -947,14 +958,14 @@ def gui(stock_name):
 			print ('finish insert')
 			count = 0
 			root.update()
-			time.sleep(1)
+			#time.sleep(5)
 			#while count>pow(100, 100):
 			#	count+=1
 
 
 
 			
-			root.update()
+			#root.update()
 
 			
 
@@ -1044,5 +1055,5 @@ def main_test():
 
 
 if __name__ == '__main__':
-	#main()
-	main_test()
+	main()
+	#main_test()

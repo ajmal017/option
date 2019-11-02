@@ -19,6 +19,9 @@
 #ok 4.
 #ok MA40、MA80 state
 
+# 20191027
+# 1. 要卡+ or - 的distance
+
 import sys
 #sys.path.insert(0, '/home/ckwang/.local/lib/python2.7/site-packages')
 #sys.path.insert(0, '/usr/local/lib/python3.5/dist-packages')
@@ -90,51 +93,152 @@ class Trader(object):
 		self.roe_ttm = roe_ttm
 		self.stock_folder_path = stock_folder_path
 		self.option_folder_path = option_folder_path
+		self.option_com_order_folder_path = 'final'
 		self.value_group = -1
 		self.top_volume_num = 10
 		self.part_num = 100
 		self.ma_days = 200
 		self.nKD = 9
-		self.bid_strike_thre = 0.03
+		self.bid_strike_thre = 0.03 #(bid-ask)/strike
+		self.PCS_clos_suppo_dist = 0.1
+		self.CCS_clos_press_dist = 0.1
+		self.supported_point_rate_thre = 0.5
+		self.pressed_point_rate_thre = 0.5
+		self.PCS_return_on_invest = 0.03
+		self.CCS_return_on_invest = 0.03
 
-	def get_contract(self, stock_name):
-		stock_ticker = yf.Ticker(stock_name)
-		stock_ticker.options
+	#contract_dict = {'contractSymbol': -1, \
+	#					'bid': -1, \
+	#					'ask': -1, \
+	#					'strike': -1}
+	def get_best_combination_contract(self, sell_contracts_list, buy_contracts_list, contract_type):
+		#print (sell_contracts_list)
+		PCS_combin_contract_list = []
+		CCS_combin_contract_list = []
 
-	def output_report(self, stock_name, options_file_path, result_all):
+		# PCS=SP+BP, the strike of SP need to > BP
+		if contract_type == 'put':
+			for sell_contracts_dict in sell_contracts_list:
+				for buy_contracts_dict in buy_contracts_list:
+					combin_contract_dict = {'sell_contractSymbol': -1, \
+											'buy_contractSymbol': -1, \
+											'return_on_invest': -1, \
+											'risk_max': -1, \
+											'string': -1, \
+											'lasted_close': sell_contracts_dict['lasted_close']}
+					sell_bid = float(sell_contracts_dict['bid'])
+					buy_ask = float(buy_contracts_dict['ask'])
+					#print (sell_bid, sell_contracts_dict['strike'], buy_ask, buy_contracts_dict['strike'])
+					#print (sell_contracts_dict['strike'] < buy_contracts_dict['strike'], sell_contracts_dict['strike'], buy_contracts_dict['strike'])
+					if sell_contracts_dict['strike'] < buy_contracts_dict['strike']:
+						continue
+					if sell_bid <= buy_ask:
+						continue
+					#print (sell_contracts_dict['strike'] < buy_contracts_dict['strike'], sell_contracts_dict['strike'], buy_contracts_dict['strike'])
+					sell_strike = float(sell_contracts_dict['strike'])
+					buy_strike = float(buy_contracts_dict['strike'])
+					
+					combin_contract_dict['return_on_invest'] = (sell_bid - buy_ask) / (sell_strike+0.00000001)
+					combin_contract_dict['risk_max'] = buy_strike - sell_strike + sell_bid - buy_ask
+					#print (sell_bid, buy_ask, sell_strike, combin_contract_dict['return_on_invest'])
+					#print (str(combin_contract_dict['return_on_invest'])=='nan', str(combin_contract_dict['risk_max'])=='nan')
+					if str(combin_contract_dict['return_on_invest'])=='nan' or \
+						str(combin_contract_dict['risk_max'])=='nan' or \
+						combin_contract_dict['return_on_invest'] < self.PCS_return_on_invest:
+						continue
+					#print (combin_contract_dict)
+					combin_contract_dict['sell_contractSymbol'] = copy.deepcopy(sell_contracts_dict['contractSymbol'][0])
+					combin_contract_dict['buy_contractSymbol'] = copy.deepcopy(buy_contracts_dict['contractSymbol'][0])
+					combin_contract_dict['string'] = sell_contracts_dict['put_string']
+					combin_contract_dict_temp = copy.deepcopy(combin_contract_dict)
+					PCS_combin_contract_list.append(combin_contract_dict_temp)
+			#print ('PCS_combin_contract_list', PCS_combin_contract_list)
+			return PCS_combin_contract_list
+
+		# CCS=SC+BC, the strike of SC need to < BC
+		if contract_type == 'call':
+			for sell_contracts_dict in sell_contracts_list:
+				for buy_contracts_dict in buy_contracts_list:
+					combin_contract_dict = {'sell_contractSymbol': -1, \
+											'buy_contractSymbol': -1, \
+											'return_on_invest': -1, \
+											'risk_max': -1, \
+											'string': -1, \
+											'lasted_close': sell_contracts_dict['lasted_close']}
+					sell_bid = float(sell_contracts_dict['bid'])
+					buy_ask = float(buy_contracts_dict['ask'])
+					#print (sell_bid, sell_contracts_dict['strike'], buy_ask, buy_contracts_dict['strike'])
+					if sell_contracts_dict['strike'] > buy_contracts_dict['strike']:
+						continue
+					if sell_bid <= buy_ask:
+						continue
+
+					sell_strike = float(sell_contracts_dict['strike'])
+					buy_strike = float(buy_contracts_dict['strike'])
+					
+					combin_contract_dict['return_on_invest'] = (sell_bid - buy_ask) / (sell_strike+0.00000001)
+					combin_contract_dict['risk_max'] = buy_strike - sell_strike + sell_bid - buy_ask
+					if str(combin_contract_dict['return_on_invest'])=='nan' or \
+						str(combin_contract_dict['risk_max'])=='nan' or \
+						combin_contract_dict['return_on_invest'] < self.CCS_return_on_invest:
+						continue
+					#print (combin_contract_dict)
+					combin_contract_dict['sell_contractSymbol'] = copy.deepcopy(sell_contracts_dict['contractSymbol'][0])
+					combin_contract_dict['buy_contractSymbol'] = copy.deepcopy(buy_contracts_dict['contractSymbol'][0])
+					combin_contract_dict['string'] = sell_contracts_dict['call_string']
+					combin_contract_dict_temp = copy.deepcopy(combin_contract_dict)
+					CCS_combin_contract_list.append(combin_contract_dict_temp)
+		return CCS_combin_contract_list
+
+	def output_report(self, stock_name, options_file_path, options_com_order_csv_path, result_all):
 		lasted_date = list(result_all['moving_average'].keys())[0]
 		lasted_close = float(result_all['moving_average'][lasted_date]['close'])
 		lasted_situation_type = result_all['moving_average'][lasted_date]['situation_type']
-		point_string = ''
-		# 1-(point/close)
-		if 'cow' in lasted_situation_type:
-			for interval_dict in result_all['supported_point']:
-				if interval_dict['topk_volume'] < 0.5:
-					break
-				point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], 2), round(1-(float(interval_dict['Interval'].split('_')[1])/lasted_close), 2))
-		else:
-			for interval_dict in result_all['pressed_point']:
-				if interval_dict['topk_volume'] < 0.5:
-					break
-				point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], 2), round(1-(float(interval_dict['Interval'].split('_')[0])/lasted_close), 2))
+		cow_point_string = ''
+		bear_point_string = ''
 
+		#if 'cow' in lasted_situation_type:
+		#	for interval_dict in result_all['supported_point']:
+		#		if interval_dict['topk_volume'] < 0.5:
+		#			break
+		#		point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], 2), round(1-(float(interval_dict['Interval'].split('_')[1])/lasted_close), 2))
+		#else:
+		#	for interval_dict in result_all['pressed_point']:
+		#		if interval_dict['topk_volume'] < 0.5:
+		#			break
+		#		point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], 2), round(1-(float(interval_dict['Interval'].split('_')[0])/lasted_close), 2))
+
+		# SP:	1-(point/close)越大，closing跟point越遠
+		for interval_dict in result_all['supported_point']:
+			if interval_dict['topk_volume'] < self.supported_point_rate_thre:
+				break
+			cow_point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], 2), round(1-(float(interval_dict['Interval'].split('_')[1])/lasted_close), 2))
+		
+		# BP:	1-(point/close)越小，closing跟point越遠
+		for interval_dict in result_all['pressed_point']:
+			if interval_dict['topk_volume'] < self.pressed_point_rate_thre:
+				break
+			bear_point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], 2), round(1-(float(interval_dict['Interval'].split('_')[0])/lasted_close), 2))
+
+		'''
 		with open(options_file_path, 'w', newline='') as csvfile:
 			writer = csv.writer(csvfile)
 			writer.writerow(['type', 'date', 'contractSymbol', 'strike', 'bid', \
-				'ask', 'bid/strike', 'vol', 'interval / topk% / 1-(point/close)', \
+				'ask', 'bid/strike', 'vol', 'lasted_closing', 'interval / topk% / 1-(point/close)', \
 				'change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state(keep)', \
 				'MA80_state(keep)', 'situation_type', 'k', 'd'])
 			stock_ticker = yf.Ticker(stock_name)
 			for date in stock_ticker.options:
-				for idx, opts in enumerate(stock_ticker.option_chain(date)):
-					typ = 'call' if idx == 0 else 'put'
+				for index, opts in enumerate(stock_ticker.option_chain(date)):
+					typ = 'call' if index == 0 else 'put'
+					point_string = bear_point_string if index == 0 else cow_point_string
 					opts_dict = opts.to_dict()
 					for idx in opts_dict['contractSymbol'].keys():
 						#opt = opts_dict[key][idx]
 						writer.writerow([typ, date, opts_dict['contractSymbol'][idx], \
 							opts_dict['strike'][idx], opts_dict['bid'][idx], opts_dict['ask'][idx], \
 							round(opts_dict['bid'][idx]/opts_dict['strike'][idx], 3), opts_dict['volume'][idx], \
-							point_string, \
+							lasted_close, point_string, \
 							opts_dict['change'][idx], result_all['moving_average'][lasted_date]['MA5'], \
 							result_all['moving_average'][lasted_date]['MA20'], \
 							result_all['moving_average'][lasted_date]['MA40'], \
@@ -144,7 +248,91 @@ class Trader(object):
 							lasted_situation_type, \
 							round(result_all['moving_average'][lasted_date]['K'], 3), \
 							round(result_all['moving_average'][lasted_date]['D'], 3)])
+							'''
+		print (options_file_path)
+		df = pd.read_csv(options_file_path)
+		df_shape = df.shape
+		type_last = ''
+		date_last = ''
+		contracts_list = []
+		contract_dict = {'contractSymbol': -1, \
+							'bid': -1, \
+							'ask': -1, \
+							'strike': -1, \
+							'lasted_close': lasted_close, \
+							}
+
+		for num in range(df_shape[0]):
+			row = df[:][num:num+1]
+			contract_dict['contractSymbol'] = row['contractSymbol'].values
+			contract_dict['bid'] = row['bid'].values
+			contract_dict['ask'] = row['ask'].values
+			contract_dict['strike'] = row['strike'].values
+			contract_dict['put_string'] = cow_point_string
+			contract_dict['call_string'] = bear_point_string
+			contract_dict['lasted_close'] = lasted_close
+			contract_dict = copy.deepcopy(contract_dict)
+			contracts_list.append(contract_dict)
+
+
+			if (row['type'].values != type_last or row['date'].values != date_last):
+				#del contracts_list[-1]
+				combin_contract_list = self.get_best_combination_contract(contracts_list[:-2], contracts_list[:-2], type_last)
+				print (combin_contract_list)#, row['type'].values, row['date'].values)
+				if not combin_contract_list== []:
+					assert False
+				contracts_list = []
+				contracts_list.append(contract_dict)
+
+			type_last = row['type'].values
+			date_last = row['date'].values
+
+		'''
+		with open(options_com_order_csv_path, 'w', newline='') as csvfile:
+			good_contract_dict = {	'sell_contract': -1, \
+									'buy_contract': -1, \
+									'return_on_invest': -1, \
+									'risk_max': -1 }
+			for date in stock_ticker.options:
+				call_contract_dict = stock_ticker.option_chain(date)[0].to_dict()#['contractSymbol']
+				put_contract_dict = stock_ticker.option_chain(date)[1].to_dict()#['contractSymbol']
+
+				for put_contract_sell_idx in put_contract_dict['contractSymbol'].keys():
+					for put_contract_buy_idx in put_contract_dict['contractSymbol'].keys():
+						good_contract_dict['sell_contract'] = put_contract_dict['contractSymbol'][put_contract_sell_idx]
+						good_contract_dict['buy_contract'] = put_contract_dict['contractSymbol'][put_contract_buy_idx]
+						#print (put_contract_dict['bid'][put_contract_sell_idx])
+						#print (type(put_contract_dict['bid'][put_contract_sell_idx]))
+						#assert False
+						put_sell_bid = float(put_contract_dict['bid'][put_contract_sell_idx])
+						put_buy_ask = float(put_contract_dict['ask'][put_contract_buy_idx])
+						if put_sell_bid <= put_buy_ask:
+							continue
+						#print (put_sell_bid)
+						put_sell_strike = float(put_contract_dict['strike'][put_contract_sell_idx])
+						put_buy_strike = float(put_contract_dict['strike'][put_contract_buy_idx])
+						good_contract_dict['return_on_invest'] = (put_sell_bid - put_buy_ask) / (put_sell_strike+0.00000001)
+						good_contract_dict['risk_max'] = put_buy_strike - put_sell_strike + put_sell_bid - put_buy_ask
+						if str(good_contract_dict['return_on_invest'])=='nan' or \
+							str(good_contract_dict['risk_max'])=='nan' or \
+							good_contract_dict['return_on_invest'] < self.PCS_return_on_invest:
+							continue
+						print (good_contract_dict)
+						#input('wait')
+			#assert False
+		'''
+# sp/bp 	sc/bc
 					
+
+
+
+		#self.PCS_clos_suppo_dist = 0.1
+		#self.CCS_clos_press_dist = 0.1
+		#self.supported_point_rate_thre = 0.5
+		#self.pressed_point_rate_thre = 0.5
+		#self.PCS_return_on_invest = 0.03
+		#self.CCS_return_on_invest = 0.03
+
 					#print (opts_dict)
 		#input('wait')
 		
@@ -672,18 +860,19 @@ class Trader(object):
 		"""
 		while not stock_queues.empty():
 			stock_name = stock_queues.get()
-			if not self.analysis_statement(stock_name):
-				continue
+#			if not self.analysis_statement(stock_name):
+#				continue
 
 			sav_stock_csv_path = '{}.csv'.format(os.path.join(self.stock_folder_path, stock_name))
 			sav_option_csv_path = '{}.csv'.format(os.path.join(self.option_folder_path, stock_name))
+			sav_option_com_order_csv_path = '{}.csv'.format(os.path.join(self.option_com_order_folder_path, stock_name))
 			#data = yf.download("{}".format(stock_name[0:stock_name.find('.')]), start="1960-01-01", end="2020-12-31")
 			#data.to_csv(sav_csv_path)
-			df = self.crawl_price(stock_name)
-			if len(df) < self.ma_days:
-				continue
+#			df = self.crawl_price(stock_name)
+#			if len(df) < self.ma_days:
+#				continue
 			result_all = self.get_supporting_point(stock_name, sav_stock_csv_path)
-			self.output_report(stock_name, sav_option_csv_path, result_all)
+			self.output_report(stock_name, sav_option_csv_path, sav_option_com_order_csv_path, result_all)
 			print ('worker number {}, stock_name is {}'.format(workers_num, stock_name))
 
 			#time.sleep(5)
@@ -765,9 +954,10 @@ def get_args():
 	return parser.parse_args()
 
 def main():
-	get_stock_name_list()
+#	get_stock_name_list()
 	param = get_args()
-	boss = Boss(['{}'.format(stock_name[:-4]) for stock_name in os.listdir('/Users/Wiz/Desktop/option/stocks_old') if not '.' in stock_name[:-4]])
+#	boss = Boss(['{}'.format(stock_name[:-4]) for stock_name in os.listdir('/Users/Wiz/Desktop/option/stocks_old') if not '.' in stock_name[:-4]])
+	boss = Boss(['{}'.format(stock_name[:-4]) for stock_name in os.listdir('/Users/Wiz/Desktop/option/stocks') if not '.' in stock_name[:-4]])
 	#boss = Boss(get_stock_name_list())
 	boss.load_config(param.config_path)
 	boss.hire_worker()

@@ -346,6 +346,128 @@ class Trader(object):
 			# 寫入另外幾列資料
 			#writer.writerow(['令狐沖', 175, 60])
 
+	def get_stock_value(self, csv_path, stock_tech_idx_dict, m=1500):
+		"""
+		function: read closing value
+			input:
+				csv_path: the path of csv that downloading from yahoo finance
+				m: how many days do you want
+				stock_tech_idx_dict
+			output:
+				stock_tech_idx_dict:
+				{
+					'20191010': {'Close': xxx, 'High': xxx, 'Low': xxx},
+					'20191011': {'Close': xxx, 'High': xxx, 'Low': xxx},
+					'20191012': {'Close': xxx, 'High': xxx, 'Low': xxx},
+				}
+		"""
+		with open(csv_path, 'r') as file_read:
+			for line in file_read.readlines()[-m:]:
+				line = line.split(',')
+				if line[0] == 'Date':
+					continue
+				Date, Open, High, Low, Close, Adj_Close, Volume = line[0], line[1], line[2], line[3], line[4], line[5], (line[6].strip('\n'))
+				if Open == 'null' or High == 'null' or Low == 'null' or Close == 'null' or Volume == 'null':
+					Open, High, Low, Close, Volume = Open_last, High_last, Low_last, Close_last, Volume_last
+				stock_tech_idx_dict[Date] = {'Close': float(Close),
+											 'High': float(High),
+											 'Low': float(Low),
+											 'MA':  -1,
+											 'RSI':  -1,
+											 'D': -1,
+											 'MACD': -1}
+				Open_last, High_last, Low_last, Close_last, Volume_last = Open, High, Low, Close, Volume
+			return stock_tech_idx_dict
+
+	def get_KD(self, csv_path, stock_tech_idx_dict, nBin=5, nKD=9, m=1500):
+		"""
+		function: KD
+			input:
+				csv_path: the path of csv that downloading from yahoo finance
+				stock_tech_idx_dict: 
+				nBin: how many part do you want to split
+				nKD: 
+				m: how many days do you want
+			output:
+				stock_tech_idx_dict:
+				{
+					'20191010': {'D': 1~5},
+					'20191011': {'D': 1~5},
+					'20191012': {'D': 1~5},
+				}
+				1:0~20
+				2:21~40
+				...
+				...
+				...
+		"""
+		K_old, D_old = 0.0, 0.0
+		tmp_high_price_list,  tmp_low_price_list = [], []
+		for date in stock_tech_idx_dict.keys():
+			tmp_high_price_list.append(stock_tech_idx_dict[date]['High'])
+			tmp_low_price_list.append(stock_tech_idx_dict[date]['Low'])
+			if len(tmp_high_price_list) == nKD and len(tmp_low_price_list) == nKD:
+				n_stock_low = min(tmp_low_price_list)
+				n_stock_high = max(tmp_high_price_list)
+				close = stock_tech_idx_dict[date]['Close']
+				RSV = 100.0 * ((close-n_stock_low)/(n_stock_high-n_stock_low+0.00000001))
+				K_new = (2 * K_old / 3) + (RSV / 3)
+				D_new = (2 * D_old / 3) + (K_new / 3)
+				stock_tech_idx_dict[date]['D'] = D_new // (100/nBin)
+				K_old, D_old = K_new, D_new
+				tmp_high_price_list.pop(0)
+				tmp_low_price_list.pop(0)
+
+		return stock_tech_idx_dict
+
+	def get_RSI(self, csv_path, stock_tech_idx_dict, nBin=5, n=6, m=1500):
+		"""
+		function: RSI
+			input:
+				csv_path: the path of csv that downloading from yahoo finance
+				stock_tech_idx_dict: 
+				nBin: how many part do you want to split
+				n: average days 
+				m: how many days do you want
+			output:
+				stock_tech_idx_dict:
+				{
+					'20191010': {'RSI': 1~5},
+					'20191011': {'RSI': 1~5},
+					'20191012': {'RSI': 1~5},
+				}
+				1:0~20
+				2:21~40
+				...
+				...
+				...
+		"""
+		tmp_up_price_list, tmp_down_price_list, tmp_mv_down_price_list, tmp_mv_up_price_list = [], [], [], []
+		fisrt_flag=True
+		for date in stock_tech_idx_dict.keys():
+			if fisrt_flag:
+				close_last = stock_tech_idx_dict[date]['Close']
+				fisrt_flag=False
+				continue
+			if stock_tech_idx_dict[date]['Close'] > close_last:
+				tmp_up_price_list.append(abs(stock_tech_idx_dict[date]['Close'] - close_last))
+				tmp_down_price_list.append(0)
+			elif stock_tech_idx_dict[date]['Close'] < close_last:
+				tmp_up_price_list.append(0)
+				tmp_down_price_list.append(abs(stock_tech_idx_dict[date]['Close'] - close_last))
+			else:
+				tmp_up_price_list.append(0)
+				tmp_down_price_list.append(0)
+			close_last = stock_tech_idx_dict[date]['Close']
+			if len(tmp_up_price_list) == n and len(tmp_down_price_list) == n:
+				mv_down_price = sum(tmp_down_price_list) / n
+				mv_up_price = sum(tmp_up_price_list) / n
+				RSI = (100 * mv_up_price) / (mv_up_price + mv_down_price)
+				stock_tech_idx_dict[date]['RSI'] = RSI // (100/nBin)
+				tmp_up_price_list.pop(0)
+				tmp_down_price_list.pop(0)
+		return stock_tech_idx_dict
+
 	def get_supporting_point(self, stock_name, file_path):
 		print ('stock_name: {}'.format(stock_name))
 		stock_dict_sum = {'topk_vol':[],'supported_point':{},'pressed_point':{},\
@@ -1243,7 +1365,26 @@ def main_test():
 # sp + bp
 # type date strike bid ask bid/strike vol |1-(close/strike)| Change MA5 MA20 MA40 MA80 MA40_state MA80_state k d
 
+def main_update_lookuptable():
+	period_days = 5
+	difference_rate = 0.1
+	stock_folder_path = 'stocks'
+	options_folder_path = 'options'
+	roe_ttm = 1
+	t = Trader(period_days, difference_rate, stock_folder_path, options_folder_path, roe_ttm)
+
+	stock_name = 'AMD'#''
+	file_path = 'stocks/{}.csv'.format(stock_name)
+
+	stock_tech_idx_dict = {}
+	stock_tech_idx_dict = t.get_stock_value(file_path, stock_tech_idx_dict, m=1500)
+	stock_tech_idx_dict = t.get_KD(file_path, stock_tech_idx_dict, nBin=5, nKD=9, m=1500)
+	stock_tech_idx_dict = t.get_RSI(file_path, stock_tech_idx_dict, nBin=5, n=6, m=1500)
+	
+	print (stock_tech_idx_dict)
+
 
 if __name__ == '__main__':
-	main()
+	#main()
+	main_update_lookuptable()
 	#main_test()

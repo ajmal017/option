@@ -420,6 +420,17 @@ class Trader(object):
 
 		return stock_tech_idx_dict
 
+	def output_tech_idx(self, tech_idx_path, stock_tech_idx_dict):
+		with open(tech_idx_path, 'w', newline='') as csvfile:
+			writer = csv.writer(csvfile)
+			writer.writerow(['idx', 'date', 'Close', 'MA', 'MACD', 'D', 'RSI'])
+			stock_ticker = yf.Ticker(stock_name)
+			for index, date in enumerate(stock_tech_idx_dict.keys()):
+				writer.writerow([index, date, stock_tech_idx_dict['date']['Close']\
+					, stock_tech_idx_dict['date']['MA'], stock_tech_idx_dict['date']['MACD']\
+					, stock_tech_idx_dict['date']['D'], stock_tech_idx_dict['date']['RSI']])
+							'''
+
 	def get_RSI(self, csv_path, stock_tech_idx_dict, nBin=5, n=6, m=1500):
 		"""
 		function: RSI
@@ -1375,12 +1386,13 @@ def main_update_lookuptable():
 
 	stock_name = 'AMD'#''
 	file_path = 'stocks/{}.csv'.format(stock_name)
+	tech_idx_path = 'tech_idx.csv'
 
 	stock_tech_idx_dict = {}
 	stock_tech_idx_dict = t.get_stock_value(file_path, stock_tech_idx_dict, m=1500)
 	stock_tech_idx_dict = t.get_KD(file_path, stock_tech_idx_dict, nBin=5, nKD=9, m=1500)
 	stock_tech_idx_dict = t.get_RSI(file_path, stock_tech_idx_dict, nBin=5, n=6, m=1500)
-	
+	t.output_tech_idx(tech_idx_path, stock_tech_idx_dict)
 	print (stock_tech_idx_dict)
 
 

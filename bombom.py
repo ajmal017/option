@@ -431,6 +431,145 @@ class Trader(object):
 					, stock_tech_idx_dict[date]['MA'], stock_tech_idx_dict[date]['MACD']\
 					, stock_tech_idx_dict[date]['D'], stock_tech_idx_dict[date]['RSI']])
 
+	def get_MA(self, CSV, stock_tech_idx_dict, Total_day=10*250, percent=1): #Slew_keep_day, 
+		'''
+		Input:
+		CSV: Yahoo API stock history
+		Total_Day: MA's days caculatation
+		percent: if smaller this percent, which is unknow status
+
+		Output:
+		1=Bull_big: MA5 > MA4 > MA40 > MA80
+		2=Bull_Samll: MA40 > MA80
+		3=Bull_Samll_5<40: MA40 > MA80, MA40 > MA5
+		4=kink_P: else & MA80 increase 3 days
+		5=Bear_big: MA5 < MA4 < MA40 < MA80
+		6=Bear_Samll: MA40 < MA80
+		7=Bear_Samll_5>40: MA40 > MA80, MA40 > MA5
+		8=kink_n: else & MA80 decrease 3 days
+		9=kink: else
+
+		MA5=avg(5 close days)
+		MA4=avg(4 MA5 days)
+		FMA40=Weighted moving average: close[40-n]*(40-n)/(40*(40+1)/2)
+		FMA80=Weighted moving average: FMA40[80-n]*(80-n)/(80*(80+1)/2)
+		'''
+
+		price_history = open(CSV,'r').readlines()
+		strat_row=len(price_history)-Total_day+1-120 # >120 is MA80 effective data
+		Loop_T=Total_day+120-1
+		if strat_row<1: 
+			strat_row=1
+			Loop_T=len(price_history)-1
+		#initialize
+		MA5=0
+		MA4=0
+		MA40=0
+		MA80=0
+		sum_n40=0
+		sum_n80=0
+		#=============================
+		b_g4=percent/4/100+1
+		b_g40=percent/2/100+1
+		b_g80=percent/100+1
+		s_g4=1-percent/4/100
+		s_g40=1-percent/2/100
+		s_g80=1-percent/100
+		#=============================
+		summary={}
+		MA_temp1={}
+		MA_temp3={}
+		for i in range (0,Loop_T):
+			MA_temp2={}
+			Date=price_history[strat_row].replace('\n','').split(',')[0]
+			try: 
+				Close=price_history[strat_row].replace('\n','').split(',')[5]
+			except: # close=nan
+				Close=price_history[strat_row-1].replace('\n','').split(',')[5]
+			MA_temp2['Close']=Close
+			MA_temp2['Date']=Date
+			# ========================MA5========================
+			MA5 = float(MA5) + float(Close)
+			MA_temp2['MA5']=0
+			MA_temp1[i]=MA_temp2
+			if i>= 4:
+				MA_temp1[i]['MA5']= round(float(MA5)/5,2)
+				MA5=float(MA5)-float(MA_temp1[i-4]['Close'])
+			# ========================MA4========================
+			MA4 = float(MA4) + float(MA_temp1[i]['MA5'])
+			MA_temp2['MA4']=0
+			MA_temp1[i]=MA_temp2
+			if i>= 3:
+				MA_temp1[i]['MA4']= round(float(MA4)/4,2)
+				MA4=float(MA4)-float(MA_temp1[i-3]['MA5'])
+			# ========================FMA40========================
+			MA40 = float(MA40) + float(Close)
+			MA_temp2['MA40']=0
+			MA_temp1[i]=MA_temp2
+			if i>= 39:
+				n=0
+				for m in range (0,40):
+					try:
+						sum_n40=float(sum_n40)+float(MA_temp1[i-n]['Close'])*(40-n)/(40*(40+1)/2)
+					except:
+						break
+					n=n+1
+				MA_temp1[i]['MA40']= round(sum_n40,2)
+				sum_n40=0
+			# ========================FMA80========================
+			MA80 = float(MA80) + float(MA_temp1[i]['MA40'])
+			MA_temp2['MA80']=0
+			MA_temp1[i]=MA_temp2
+			if i>= 79:
+				n=0
+				for m in range (0,80):
+					try:
+						sum_n80=float(sum_n80)+float(MA_temp1[i-n]['MA40'])*(80-n)/(80*(80+1)/2)
+					except:
+						break
+					n=n+1
+				MA_temp1[i]['MA80']= round(sum_n80,2)
+				sum_n80=0
+			strat_row=strat_row+1
+			# ========================MA summary========================
+			MA_5=float(MA_temp1[i]['MA5']) #green
+			MA_4=float(MA_temp1[i]['MA4']) #red
+			MA_40=float(MA_temp1[i]['MA40']) #white
+			MA_80=float(MA_temp1[i]['MA80']) # blue
+			MA_temp2['MA_sum']=0
+			MA_temp1[i]=MA_temp2
+
+			if MA_5 > MA_4*b_g4 and MA_4 > MA_40*b_g40 and MA_40 > MA_80*b_g80:# 	
+				MA_temp1[i]['MA_sum'] =1 # 'Bull-Big'
+			elif MA_5 < MA_4*s_g4 and MA_4 < MA_40*s_g40 and MA_40 < MA_80*s_g80:# 	
+				MA_temp1[i]['MA_sum'] =5 # 'Bear-Big'
+			elif MA_40 > MA_80*b_g80 and MA_5 < MA_40*s_g40:# 
+				MA_temp1[i]['MA_sum'] =3 # 'Bull-small_5<40'
+			elif MA_40 < MA_80*s_g80 and MA_5 > MA_40*b_g40:# 	
+				MA_temp1[i]['MA_sum'] =7 # 'Bear-small_5>40'
+			elif MA_40 > MA_80*b_g80:# 
+				MA_temp1[i]['MA_sum'] =2 # 'Bull-small'
+			elif MA_40 < MA_80*s_g80:# 	
+				MA_temp1[i]['MA_sum'] =6 # 'Bear-small'
+			else:
+				try:
+					if MA_temp1[i]['MA80']>MA_temp1[i-1]['MA80'] and MA_temp1[i-1]['MA80']>MA_temp1[i-2]['MA80']:
+						MA_temp1[i]['MA_sum'] =4 # 'kink_P'
+					elif MA_temp1[i]['MA80']<MA_temp1[i-1]['MA80'] and MA_temp1[i-1]['MA80']<MA_temp1[i-2]['MA80']:
+						MA_temp1[i]['MA_sum'] =8 # 'kink_n'
+					else:
+						MA_temp1[i]['MA_sum'] =9 # 'kink'
+				except:
+						MA_temp1[i]['MA_sum'] =9 # 'kink'					
+			
+			sum_temp={}
+			sum_temp['MA']=MA_temp1[i]['MA_sum']
+			summary[Date]=sum_temp
+			#MA_temp3[Date] = copy.deepcopy(MA_temp2)
+			stock_tech_idx_dict[Date]['MA'] = copy.deepcopy(MA_temp2['MA_sum'])
+
+		#return summary
+		return stock_tech_idx_dict
 
 	def get_RSI(self, csv_path, stock_tech_idx_dict, nBin=5, n=6, m=1500):
 		"""
@@ -1393,6 +1532,7 @@ def main_update_lookuptable():
 	stock_tech_idx_dict = t.get_stock_value(file_path, stock_tech_idx_dict, m=1500)
 	stock_tech_idx_dict = t.get_KD(file_path, stock_tech_idx_dict, nBin=5, nKD=9, m=1500)
 	stock_tech_idx_dict = t.get_RSI(file_path, stock_tech_idx_dict, nBin=5, n=6, m=1500)
+	stock_tech_idx_dict = t.get_MA(file_path, stock_tech_idx_dict, Total_day=1000, percent=1)
 	t.output_tech_idx(tech_idx_path, stock_tech_idx_dict)
 	print (stock_tech_idx_dict)
 

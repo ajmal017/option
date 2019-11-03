@@ -1528,13 +1528,17 @@ def main_update_lookuptable():
 	file_path = 'stocks/{}.csv'.format(stock_name)
 	tech_idx_path = 'techidx/{}.csv'.format(stock_name)
 
+	#import time
+	#start = time.time()
+	m = 20*250
 	stock_tech_idx_dict = {}
-	stock_tech_idx_dict = t.get_stock_value(file_path, stock_tech_idx_dict, m=1500)
-	stock_tech_idx_dict = t.get_KD(file_path, stock_tech_idx_dict, nBin=5, nKD=9, m=1500)
-	stock_tech_idx_dict = t.get_RSI(file_path, stock_tech_idx_dict, nBin=5, n=6, m=1500)
-	stock_tech_idx_dict = t.get_MA(file_path, stock_tech_idx_dict, Total_day=1000, percent=1)
+	stock_tech_idx_dict = t.get_stock_value(file_path, stock_tech_idx_dict, m=m)
+	stock_tech_idx_dict = t.get_KD(file_path, stock_tech_idx_dict, nBin=5, nKD=9, m=m)
+	stock_tech_idx_dict = t.get_RSI(file_path, stock_tech_idx_dict, nBin=5, n=6, m=m)
+	stock_tech_idx_dict = t.get_MA(file_path, stock_tech_idx_dict, Total_day=m-200, percent=1)
 	t.output_tech_idx(tech_idx_path, stock_tech_idx_dict)
-	print (stock_tech_idx_dict)
+	#print (time.time()-start)
+	#print (stock_tech_idx_dict)
 
 
 if __name__ == '__main__':

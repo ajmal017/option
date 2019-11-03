@@ -424,12 +424,13 @@ class Trader(object):
 		with open(tech_idx_path, 'w', newline='') as csvfile:
 			writer = csv.writer(csvfile)
 			writer.writerow(['idx', 'date', 'Close', 'MA', 'MACD', 'D', 'RSI'])
-			stock_ticker = yf.Ticker(stock_name)
 			for index, date in enumerate(stock_tech_idx_dict.keys()):
-				writer.writerow([index, date, stock_tech_idx_dict['date']['Close']\
-					, stock_tech_idx_dict['date']['MA'], stock_tech_idx_dict['date']['MACD']\
-					, stock_tech_idx_dict['date']['D'], stock_tech_idx_dict['date']['RSI']])
-							'''
+				#print (index)
+				#print (date)
+				writer.writerow([index, date, stock_tech_idx_dict[date]['Close']\
+					, stock_tech_idx_dict[date]['MA'], stock_tech_idx_dict[date]['MACD']\
+					, stock_tech_idx_dict[date]['D'], stock_tech_idx_dict[date]['RSI']])
+
 
 	def get_RSI(self, csv_path, stock_tech_idx_dict, nBin=5, n=6, m=1500):
 		"""

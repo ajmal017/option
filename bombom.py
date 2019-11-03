@@ -1526,7 +1526,7 @@ def main_update_lookuptable():
 
 	stock_name = 'AMD'#''
 	file_path = 'stocks/{}.csv'.format(stock_name)
-	tech_idx_path = 'tech_idx.csv'
+	tech_idx_path = 'techidx/{}.csv'.format(stock_name)
 
 	stock_tech_idx_dict = {}
 	stock_tech_idx_dict = t.get_stock_value(file_path, stock_tech_idx_dict, m=1500)

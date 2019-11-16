@@ -49,6 +49,11 @@ import csv
 
 from finviz.screener import Screener
 
+import json
+
+# dary
+import operator
+
 #print (finviz.get_stock('AMD'))
 #assert False
 # Optionable
@@ -375,9 +380,211 @@ class Trader(object):
 											 'MA':  -1,
 											 'RSI':  -1,
 											 'D': -1,
-											 'MACD': -1}
+											 'MACD': -1,
+											 'Supported_point': {}}
 				Open_last, High_last, Low_last, Close_last, Volume_last = Open, High, Low, Close, Volume
 			return stock_tech_idx_dict
+
+	@staticmethod
+	def get_date_num(Date):
+		return int(Date.split('-')[0])*10000+int(Date.split('-')[1])*100+int(Date.split('-')[2])*1
+	
+	@staticmethod
+	def sort_by_value(d): 
+		items=d.items() 
+		backitems=[[v[1],v[0]] for v in items] 
+		backitems.sort(reverse=True)
+		d_out = {}
+		for i in range(0,len(backitems)):
+			d_out[backitems[i][1]] = d[backitems[i][1]]
+		return d_out
+
+	@staticmethod
+	def multiply_close_interval(sup_pnt_dict_final, close_interval, interval_value_point, valid_percentage_sup_pnt_threthod):
+		d = {}
+		first_flag = True
+		for sup_dict_key in sup_pnt_dict_final.keys():
+			if first_flag:
+				value_max = sup_pnt_dict_final[sup_dict_key]
+				first_flag = False
+			if (sup_pnt_dict_final[sup_dict_key] / value_max) > valid_percentage_sup_pnt_threthod:
+				d[round(sup_dict_key*close_interval, interval_value_point)] = round(sup_pnt_dict_final[sup_dict_key] / value_max, 2)
+			#d[round(sup_dict_key*close_interval, interval_value_point)] = sup_pnt_dict_final[sup_dict_key]
+		return d
+
+	def process_sup_pnt_list_to_interval(self, support_list, sup_pnt_close_interval, close_interval, interval_value_point, valid_percentage_sup_pnt_threthod):
+		sup_pnt_dict_final = {}
+		for sup_pnt in support_list:
+			sup_pnt_interval_num = sup_pnt['Close']//close_interval if sup_pnt['Close']//close_interval < sup_pnt_close_interval else sup_pnt_close_interval
+			if sup_pnt_interval_num in sup_pnt_dict_final.keys():
+				sup_pnt_dict_final[sup_pnt_interval_num] += sup_pnt['Volume_sum']
+			else:
+				sup_pnt_dict_final[sup_pnt_interval_num] = sup_pnt['Volume_sum']
+		sup_pnt_dict_final = self.sort_by_value(sup_pnt_dict_final)
+		sup_pnt_dict_final = self.multiply_close_interval(sup_pnt_dict_final, close_interval, interval_value_point, valid_percentage_sup_pnt_threthod)
+		return sup_pnt_dict_final
+
+	@staticmethod
+	def find_min_idx_in_interval(temp_list, idx, min_pass, min_next, stock_dict, stock_date_list):
+		#Input:
+		#	temp_list: the close_list from 5 days ago ~ 5 days next
+		#	idx: main idx(today's idx)
+		#	max & min: the max & min close from 5 days ago ~ 5 days next
+		#Output:
+		#	max & min idx
+		stock_close_volume_sum = 0
+		start = temp_list.index(min_pass)
+		end = temp_list.index(min_next)
+		for index in range(start, end+1):
+			stock_close_volume_sum+=temp_list[index]*stock_dict[stock_date_list[index]]['Volume']
+			#print ('find_min_idx_in_interval', stock_close_volume_sum)
+		return stock_close_volume_sum
+
+	@staticmethod
+	def find_max_idx_in_interval(temp_list, idx, max_pass, max_next, stock_dict, stock_date_list):
+		#Input:
+		#	temp_list: the close_list from 5 days ago ~ 5 days next
+		#	idx: main idx(today's idx)
+		#	max & min: the max & min close from 5 days ago ~ 5 days next
+		#Output:
+		#	max & min idx
+		stock_close_volume_sum = 0
+		start = temp_list.index(max_pass)
+		end = temp_list.index(max_next)
+		for index in range(start, end+1):
+			stock_close_volume_sum+=temp_list[index]*stock_dict[stock_date_list[index]]['Volume']
+			#print ('find_max_idx_in_interval', stock_close_volume_sum)
+		return stock_close_volume_sum
+
+	@staticmethod
+	def get_interval_volume_sum(close_list, volume_list, idx, max_pass, max_next, stock_dict, stock_date_list):
+		#Input:
+		#	temp_list: the close_list from 5 days ago ~ 5 days next
+		#	idx: main idx(today's idx)
+		#	max & min: the max & min close from 5 days ago ~ 5 days next
+		#Output:
+		#	max & min idx
+		
+		stock_volume_sum = 0
+		start = close_list.index(max_pass)
+		end = close_list.index(max_next)
+		for index in range(start, end+1):
+			stock_volume_sum+=volume_list[index]
+		return stock_volume_sum
+
+	@staticmethod
+	def combine_sup_pnt(stock_tech_idx_dict, sup_pnt_dict_final_all):
+		for date in stock_tech_idx_dict.keys():
+			stock_tech_idx_dict[date]['Supported_point'] = sup_pnt_dict_final_all[date]
+		return stock_tech_idx_dict
+
+	def get_supported_point(self, file_path, stock_tech_idx_dict, sup_pnt_close_interval=100, valid_percentage_sup_pnt_threthod=0.5):
+		# step1 先跑5年，記錄最大累積成交量支撐點（sup_pnt_max）
+		# step2 從第6年的第一開始，繼續找支撐點，一旦支撐點形成，先看該支撐點的價格跟其他支撐點的價格距離近不近，如果近就合併(update sup_pnt_dict)
+		# sup_pnt_dict = {					sup_pnt_dict = {
+		#	'23.5': volume1    -> 			'23.5': volume1,
+		# }									'27.5': volume2
+		#		 							}
+		# step3 找到目前的close_max，並算區間
+		# step4 將sup_pnt_dict的volume轉換成百分比 if 有新的支撐點
+		# sup_pnt_percentage_dict = {				sup_pnt_percentage_dict = {
+		#	'23.5_24.5': 80%	 			->			'23.5_24.5': 80%,
+		# }												'26.5_27.5': 74%
+		#		 									}
+		# step5 將sup_pnt_dict的百分比情況update到stock_tech_idx_dict
+		# stock_tech_idx_dict = {									sup_pnt_percentage_dict = {
+		#	'2002-11-16': {'sup_pnt': {'23.5_24.5': 80%}}	 ->			'2002-11-16': {'sup_pnt': {'23.5_24.5': 80%}},
+		# }																'2004-11-16': {'sup_pnt': {'26.5_27.5': 74%}}
+		#		 													}
+
+
+		first_date = (list(stock_tech_idx_dict.keys())[0])
+		first_date_num = self.get_date_num(first_date)
+		#assert False
+		stock_dict_sum = {'topk_vol':[],'supported_point':{},'pressed_point':{},\
+							'moving_average':{}, 'MA_state_dict':{}, 'KD':{}}
+		#stock_dict_sum = {'moving_average':{}}
+		stock_dict = {}
+		press_list = []
+		count = 0
+		interval_value_point = 2
+		sup_pnt_dict_final_all = {}
+		Open_last, High_last, Low_last, Close_last, Volume_last = 0, 0, 0, 0, 0
+		stock_close_list_temp = []
+		stock_volume_list_temp = []
+		stock_date_list_temp = []
+		with open(file_path, 'r') as file_read:
+			for line in file_read.readlines():
+				
+				#count+=1
+				#if count < 12085 or count > 12095:#or count > 13500:
+				#	continue
+				line = line.split(',')
+				if line[0] == 'Date':
+					continue
+				Date, Open, High, Low, Close, Adj_Close, Volume = line[0], line[1], line[2], line[3], line[4], line[5], (line[6].strip('\n'))
+				#print (Open, Volume)
+				if Open == 'null' or High == 'null' or Low == 'null' or Close == 'null' or Volume == 'null':
+					Open, High, Low, Close, Volume = Open_last, High_last, Low_last, Close_last, Volume_last
+				if self.get_date_num(Date) < first_date_num:
+					continue
+				stock_close_list_temp.append(float(Close))
+				stock_volume_list_temp.append(int(Volume))
+				stock_date_list_temp.append(Date)
+				Open_last, High_last, Low_last, Close_last, Volume_last = Open, High, Low, Close, Volume
+
+		#print (len(stock_date_list), stock_date_list[0])
+
+		#round(self.interval_value*(num+1), interval_value_point)
+		pass_drop_rate = 0.1
+		next_drop_rate = 0.1
+		close_max = -1
+		valid_percentage_sup_pnt_threthod = 0.5
+		for idx_temp, Close_temp in enumerate(stock_close_list_temp):
+			support_list = []
+			sup_pnt_dict = {}
+			stock_close_list = stock_close_list_temp[0:idx_temp+1]
+			stock_date_list = stock_date_list_temp[0:idx_temp+1]
+			stock_volume_list = stock_volume_list_temp[0:idx_temp+1]
+			for idx, Close in enumerate(stock_close_list):
+				close_max = Close if Close > close_max else close_max
+				close_interval = round((close_max / sup_pnt_close_interval), interval_value_point)
+
+				if idx < self.period_days or idx+self.period_days > len(stock_close_list):
+					continue
+
+				Close_five_days_pass_min = min(stock_close_list[idx-self.period_days:idx])
+				if Close > Close_five_days_pass_min:
+					continue
+				Close_five_days_pass_max = max(stock_close_list[idx-self.period_days:idx])
+				if Close > Close_five_days_pass_max*(1-pass_drop_rate):
+					continue
+				Close_five_days_next_max = max(stock_close_list[idx+1:idx+1+self.period_days])
+				if Close > Close_five_days_next_max*(1-next_drop_rate):
+					continue
+				Close_five_days_next_min = min(stock_close_list[idx+1:idx+1+self.period_days])
+				if Close > Close_five_days_next_min:
+					continue
+
+				Volume_sum = self.get_interval_volume_sum(stock_close_list[idx-self.period_days:idx+1+self.period_days], \
+												stock_volume_list[idx-self.period_days:idx+1+self.period_days], \
+												idx, Close_five_days_pass_max, Close_five_days_next_max, \
+												stock_dict, stock_date_list)
+
+				support_dict = {'Date': stock_date_list[idx],
+								'Volume_sum': Volume_sum,
+								'Close': Close,
+								#'Close_list': stock_close_list[idx-self.period_days:idx+1+self.period_days],
+								#'Close_five_days_pass_max': Close_five_days_pass_max,
+								#'Close_five_days_next_max': Close_five_days_next_max,
+								}
+				#Volume_Value_max = Close*stock_dict[stock_date_list[idx]]['Volume'] if Close*stock_dict[stock_date_list[idx]]['Volume'] > Volume_Value_max else Volume_Value_max
+				#Volume_max = stock_dict[stock_date_list[idx]]['Volume'] if stock_dict[stock_date_list[idx]]['Volume'] > Volume_max else Volume_max
+				support_list.append(support_dict)
+			sup_pnt_dict_final = self.process_sup_pnt_list_to_interval(support_list, sup_pnt_close_interval, close_interval, interval_value_point, valid_percentage_sup_pnt_threthod)
+			sup_pnt_dict_final_all[stock_date_list_temp[idx_temp]] = copy.deepcopy(sup_pnt_dict_final)
+		stock_tech_idx_dict = self.combine_sup_pnt(stock_tech_idx_dict, sup_pnt_dict_final_all)
+		return stock_tech_idx_dict
 
 	def get_KD(self, csv_path, stock_tech_idx_dict, nBin=5, nKD=9, m=1500):
 		"""
@@ -423,13 +630,14 @@ class Trader(object):
 	def output_tech_idx(self, tech_idx_path, stock_tech_idx_dict):
 		with open(tech_idx_path, 'w', newline='') as csvfile:
 			writer = csv.writer(csvfile)
-			writer.writerow(['idx', 'date', 'Close', 'MA', 'MACD', 'D', 'RSI'])
+			writer.writerow(['idx', 'date', 'Close', 'MA', 'MACD', 'D', 'RSI', 'Supported_point'])
 			for index, date in enumerate(stock_tech_idx_dict.keys()):
 				#print (index)
 				#print (date)
 				writer.writerow([index, date, stock_tech_idx_dict[date]['Close']\
 					, stock_tech_idx_dict[date]['MA'], stock_tech_idx_dict[date]['MACD']\
-					, stock_tech_idx_dict[date]['D'], stock_tech_idx_dict[date]['RSI']])
+					, stock_tech_idx_dict[date]['D'], stock_tech_idx_dict[date]['RSI']\
+					, json.dumps(stock_tech_idx_dict[date]['Supported_point'])])
 
 	def get_MA(self, CSV, stock_tech_idx_dict, Total_day=10*250, percent=1): #Slew_keep_day, 
 		'''
@@ -619,6 +827,95 @@ class Trader(object):
 				tmp_up_price_list.pop(0)
 				tmp_down_price_list.pop(0)
 		return stock_tech_idx_dict
+
+	def get_MACD(self, CSV, stock_tech_idx_dict, Total_day_MACD, MACD_short, MACD_long, MACD_signallength): #Slew_keep_day, 
+		
+		'''		
+		show percentage of MACD, the purpose is compare with K'D' in the same scale.
+
+		0~20=0
+		20~40=1
+		40~60=2
+		60~80=3
+		80~100=4
+		'''
+		Total_day=Total_day_MACD*1
+		with open(CSV,'r') as f_r:
+			price_history = f_r.readlines()
+			strat_row=int(len(price_history)-Total_day+1-Total_day/5) # >Total_day/5 is MACD effective data
+			Loop_T=int(Total_day+Total_day/5-1)
+			if strat_row<1: 
+				strat_row=1
+				Loop_T=len(price_history)-1
+			#initialize
+			summary={}
+			MACD_temp1={}
+			MACD_temp3={}
+			# j=strat_row
+			for i in range (0,Loop_T):
+				MACD_temp2={}
+				Date=price_history[strat_row].replace('\n','').split(',')[0]
+				try: 
+					Close=price_history[strat_row].replace('\n','').split(',')[5]
+				except: # close=nan
+					Close=price_history[strat_row-1].replace('\n','').split(',')[5]
+				MACD_temp2['Close']=Close
+				MACD_temp2['Date']=Date
+
+				MACD_temp1[i]=MACD_temp2
+
+				EMA_short_initial=0
+				EMA_long_initial=0
+				DEM_initial=0
+				if i==0:
+					MACD_temp1[i]['EMA_short'] =EMA_short_initial+2/(MACD_short+1)*(float(Close)-EMA_short_initial)  # short_EMA innitial=0
+					MACD_temp1[i]['EMA_long'] =EMA_long_initial+2/(MACD_long+1)*(float(Close)-EMA_long_initial)  # long_EMA innitial=0
+				else:
+					MACD_temp1[i]['EMA_short'] =MACD_temp1[i-1]['EMA_short']+2/(MACD_short+1)*(float(Close)-MACD_temp1[i-1]['EMA_short'])
+					MACD_temp1[i]['EMA_long'] =MACD_temp1[i-1]['EMA_long']+2/(MACD_long+1)*(float(Close)-MACD_temp1[i-1]['EMA_long'])
+
+				MACD_temp1[i]['MACD_DIF'] =round(MACD_temp1[i]['EMA_short']-MACD_temp1[i]['EMA_long'],2)
+				if i==0:
+					MACD_temp1[i]['DEM'] = DEM_initial+2/(MACD_signallength+1)*(MACD_temp1[i]['MACD_DIF']-DEM_initial)
+				else:
+					MACD_temp1[i]['DEM'] = MACD_temp1[i-1]['DEM']+2/(MACD_signallength+1)*(MACD_temp1[i]['MACD_DIF']-MACD_temp1[i-1]['DEM'])				
+				MACD_temp1[i]['OSC'] = round(MACD_temp1[i]['MACD_DIF']-MACD_temp1[i]['DEM'],2)
+				
+				MACD_temp3[i]=MACD_temp1[i]['MACD_DIF']
+				if i>=Total_day/6: #after 1/6 of total row, DIF have more accuracy
+				#===============show MACD level
+					new_temp3 = {i:MACD_temp3[i] for i in MACD_temp3 if i>=Total_day/6}  # remove dict:key< Total_day/5, avoid rank
+					r = {key: rank for rank, key in enumerate(sorted(set(new_temp3.values()), reverse=False), 1)} #get rank 
+					MACD_rank={k: r[v] for k,v in new_temp3.items()} #get rank of key
+					DIF_max=max(MACD_rank.items(), key=operator.itemgetter(1))[0] 
+					DIF_max=MACD_rank[DIF_max] # find max rank
+					MACD_temp1[i]['MACD%'] =round(int(MACD_rank[i])/DIF_max*100,2)
+				#===============show MACD level	
+				if i>=Total_day/5: #only capture after 1/5 of total row, MACD% will be more accuracy
+					MACD_per=float(MACD_temp1[i]['MACD%'])
+					'''
+					0~20=0
+					20~40=1
+					40~60=2
+					60~80=3
+					80~100=4
+					'''
+					if MACD_per>=80:
+						MACD_temp1[i]['Range']=4
+					elif MACD_per<80 and MACD_per>=60:
+						MACD_temp1[i]['Range']=3
+					elif MACD_per<60 and MACD_per>=40:
+						MACD_temp1[i]['Range']=2
+					elif MACD_per<40 and MACD_per>=20:
+						MACD_temp1[i]['Range']=1
+					else:
+						MACD_temp1[i]['Range']=0
+					
+					summary[Date]=MACD_temp1[i]['Range']
+					stock_tech_idx_dict[Date]['MACD'] = copy.deepcopy(MACD_temp1[i]['Range'])
+				strat_row=strat_row+1
+
+			return stock_tech_idx_dict
 
 	def get_supporting_point(self, stock_name, file_path):
 		print ('stock_name: {}'.format(stock_name))
@@ -1009,38 +1306,6 @@ class Trader(object):
 
 		#print (stock_dict_sum)
 		return stock_dict_sum
-
-	@staticmethod
-	def find_min_idx_in_interval(temp_list, idx, min_pass, min_next, stock_dict, stock_date_list):
-		#Input:
-		#	temp_list: the close_list from 5 days ago ~ 5 days next
-		#	idx: main idx(today's idx)
-		#	max & min: the max & min close from 5 days ago ~ 5 days next
-		#Output:
-		#	max & min idx
-		stock_close_volume_sum = 0
-		start = temp_list.index(min_pass)
-		end = temp_list.index(min_next)
-		for index in range(start, end+1):
-			stock_close_volume_sum+=temp_list[index]*stock_dict[stock_date_list[index]]['Volume']
-			#print ('find_min_idx_in_interval', stock_close_volume_sum)
-		return stock_close_volume_sum
-
-	@staticmethod
-	def find_max_idx_in_interval(temp_list, idx, max_pass, max_next, stock_dict, stock_date_list):
-		#Input:
-		#	temp_list: the close_list from 5 days ago ~ 5 days next
-		#	idx: main idx(today's idx)
-		#	max & min: the max & min close from 5 days ago ~ 5 days next
-		#Output:
-		#	max & min idx
-		stock_close_volume_sum = 0
-		start = temp_list.index(max_pass)
-		end = temp_list.index(max_next)
-		for index in range(start, end+1):
-			stock_close_volume_sum+=temp_list[index]*stock_dict[stock_date_list[index]]['Volume']
-			#print ('find_max_idx_in_interval', stock_close_volume_sum)
-		return stock_close_volume_sum
 
 # 用基本面篩選
 # MA 40 80負斜率持續 70天就不要
@@ -1537,12 +1802,52 @@ def main_update_lookuptable():
 	stock_tech_idx_dict = t.get_KD(file_path, stock_tech_idx_dict, nBin=5, nKD=9, m=m)
 	stock_tech_idx_dict = t.get_RSI(file_path, stock_tech_idx_dict, nBin=5, n=6, m=m)
 	stock_tech_idx_dict = t.get_MA(file_path, stock_tech_idx_dict, Total_day=m-200, percent=1)
+	# step 1: 找到n個區段，區段的形成是從某一個股上市到每次歷史交易量新高
+	# step 2: 在n個區段中，找到百分比大於50％的支撐點或壓力點，並
+
 	t.output_tech_idx(tech_idx_path, stock_tech_idx_dict)
 	#print (time.time()-start)
 	#print (stock_tech_idx_dict)
 
+def main_best_contract():
+	period_days = 5
+	difference_rate = 0.1
+	stock_folder_path = 'stocks'
+	options_folder_path = 'options'
+	roe_ttm = 1
+	t = Trader(period_days, difference_rate, stock_folder_path, options_folder_path, roe_ttm)
+
+	stock_name = 'AMD'#''
+	file_path = 'stocks/{}.csv'.format(stock_name)
+	tech_idx_path = 'techidx/{}.csv'.format(stock_name)
+
+	#import time
+	#start = time.time()
+	m = 5*250
+	valid_percentage_sup_pnt_threthod = 0.5
+	sup_pnt_close_interval = 100
+
+	MACD_short=12
+	MACD_long=26
+	MACD_signallength=9
+	
+	stock_tech_idx_dict = {}
+	stock_tech_idx_dict = t.get_stock_value(file_path, stock_tech_idx_dict, m=m)
+	stock_tech_idx_dict = t.get_KD(file_path, stock_tech_idx_dict, nBin=5, nKD=9, m=m)
+	stock_tech_idx_dict = t.get_RSI(file_path, stock_tech_idx_dict, nBin=5, n=6, m=m)
+	stock_tech_idx_dict = t.get_MA(file_path, stock_tech_idx_dict, Total_day=m-200, percent=1)
+
+	stock_tech_idx_dict = t.get_MACD(file_path, stock_tech_idx_dict, Total_day_MACD=m, MACD_short=MACD_short, MACD_long=MACD_long, MACD_signallength=MACD_signallength)
+
+	stock_tech_idx_dict = t.get_supported_point(file_path, stock_tech_idx_dict, sup_pnt_close_interval=sup_pnt_close_interval, valid_percentage_sup_pnt_threthod=valid_percentage_sup_pnt_threthod)
+	print (stock_tech_idx_dict)
+
+	t.output_tech_idx(tech_idx_path, stock_tech_idx_dict)
+	#print (time.time()-start)
+	#print (stock_tech_idx_dict)
 
 if __name__ == '__main__':
 	#main()
-	main_update_lookuptable()
+	#main_update_lookuptable()
+	main_best_contract()
 	#main_test()

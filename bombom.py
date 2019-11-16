@@ -400,19 +400,19 @@ class Trader(object):
 		return d_out
 
 	@staticmethod
-	def multiply_close_interval(sup_pnt_dict_final, close_interval, interval_value_point, valid_percentage_sup_pnt_threthod):
+	def multiply_close_interval(sup_pnt_dict_final, close_interval, interval_value_point, valid_percentage_pnt_threthod):
 		d = {}
 		first_flag = True
 		for sup_dict_key in sup_pnt_dict_final.keys():
 			if first_flag:
 				value_max = sup_pnt_dict_final[sup_dict_key]
 				first_flag = False
-			if (sup_pnt_dict_final[sup_dict_key] / value_max) > valid_percentage_sup_pnt_threthod:
+			if (sup_pnt_dict_final[sup_dict_key] / value_max) > valid_percentage_pnt_threthod:
 				d[round(sup_dict_key*close_interval, interval_value_point)] = round(sup_pnt_dict_final[sup_dict_key] / value_max, 2)
 			#d[round(sup_dict_key*close_interval, interval_value_point)] = sup_pnt_dict_final[sup_dict_key]
 		return d
 
-	def process_sup_pnt_list_to_interval(self, support_list, sup_pnt_close_interval, close_interval, interval_value_point, valid_percentage_sup_pnt_threthod):
+	def process_pnt_list_to_interval(self, support_list, sup_pnt_close_interval, close_interval, interval_value_point, valid_percentage_pnt_threthod):
 		sup_pnt_dict_final = {}
 		for sup_pnt in support_list:
 			sup_pnt_interval_num = sup_pnt['Close']//close_interval if sup_pnt['Close']//close_interval < sup_pnt_close_interval else sup_pnt_close_interval
@@ -421,7 +421,7 @@ class Trader(object):
 			else:
 				sup_pnt_dict_final[sup_pnt_interval_num] = sup_pnt['Volume_sum']
 		sup_pnt_dict_final = self.sort_by_value(sup_pnt_dict_final)
-		sup_pnt_dict_final = self.multiply_close_interval(sup_pnt_dict_final, close_interval, interval_value_point, valid_percentage_sup_pnt_threthod)
+		sup_pnt_dict_final = self.multiply_close_interval(sup_pnt_dict_final, close_interval, interval_value_point, valid_percentage_pnt_threthod)
 		return sup_pnt_dict_final
 
 	@staticmethod
@@ -457,7 +457,7 @@ class Trader(object):
 		return stock_close_volume_sum
 
 	@staticmethod
-	def get_interval_volume_sum(close_list, volume_list, idx, max_pass, max_next, stock_dict, stock_date_list):
+	def get_interval_volume_sum(close_list, volume_list, idx, max_pass, max_next, stock_date_list):
 		#Input:
 		#	temp_list: the close_list from 5 days ago ~ 5 days next
 		#	idx: main idx(today's idx)
@@ -473,9 +473,15 @@ class Trader(object):
 		return stock_volume_sum
 
 	@staticmethod
-	def combine_sup_pnt(stock_tech_idx_dict, sup_pnt_dict_final_all):
-		for date in stock_tech_idx_dict.keys():
-			stock_tech_idx_dict[date]['Supported_point'] = sup_pnt_dict_final_all[date]
+	def combine_pnt(stock_tech_idx_dict, pnt_dict_final_all, pnt_type):
+		if pnt_type == 'Supported_point'
+			for date in stock_tech_idx_dict.keys():
+				stock_tech_idx_dict[date]['Supported_point'] = pnt_dict_final_all[date]
+		elif pnt_type == 'Pressed_point'
+			for date in stock_tech_idx_dict.keys():
+				stock_tech_idx_dict[date]['Pressed_point'] = pnt_dict_final_all[date]
+		else:
+			assert False, 'wrong with pnt_type: {} in combine_pnt()'.format(pnt_type)
 		return stock_tech_idx_dict
 
 	def get_supported_point(self, file_path, stock_tech_idx_dict, sup_pnt_close_interval=100, valid_percentage_sup_pnt_threthod=0.5):
@@ -539,7 +545,6 @@ class Trader(object):
 		pass_drop_rate = 0.1
 		next_drop_rate = 0.1
 		close_max = -1
-		valid_percentage_sup_pnt_threthod = 0.5
 		for idx_temp, Close_temp in enumerate(stock_close_list_temp):
 			support_list = []
 			sup_pnt_dict = {}
@@ -554,7 +559,7 @@ class Trader(object):
 					continue
 
 				Close_five_days_pass_min = min(stock_close_list[idx-self.period_days:idx])
-				if Close > Close_five_days_pass_min:
+				if Close >= Close_five_days_pass_min:
 					continue
 				Close_five_days_pass_max = max(stock_close_list[idx-self.period_days:idx])
 				if Close > Close_five_days_pass_max*(1-pass_drop_rate):
@@ -563,13 +568,13 @@ class Trader(object):
 				if Close > Close_five_days_next_max*(1-next_drop_rate):
 					continue
 				Close_five_days_next_min = min(stock_close_list[idx+1:idx+1+self.period_days])
-				if Close > Close_five_days_next_min:
+				if Close >= Close_five_days_next_min:
 					continue
 
 				Volume_sum = self.get_interval_volume_sum(stock_close_list[idx-self.period_days:idx+1+self.period_days], \
 												stock_volume_list[idx-self.period_days:idx+1+self.period_days], \
 												idx, Close_five_days_pass_max, Close_five_days_next_max, \
-												stock_dict, stock_date_list)
+												stock_date_list)
 
 				support_dict = {'Date': stock_date_list[idx],
 								'Volume_sum': Volume_sum,
@@ -581,9 +586,84 @@ class Trader(object):
 				#Volume_Value_max = Close*stock_dict[stock_date_list[idx]]['Volume'] if Close*stock_dict[stock_date_list[idx]]['Volume'] > Volume_Value_max else Volume_Value_max
 				#Volume_max = stock_dict[stock_date_list[idx]]['Volume'] if stock_dict[stock_date_list[idx]]['Volume'] > Volume_max else Volume_max
 				support_list.append(support_dict)
-			sup_pnt_dict_final = self.process_sup_pnt_list_to_interval(support_list, sup_pnt_close_interval, close_interval, interval_value_point, valid_percentage_sup_pnt_threthod)
+			sup_pnt_dict_final = self.process_pnt_list_to_interval(support_list, sup_pnt_close_interval, close_interval, interval_value_point, valid_percentage_sup_pnt_threthod)
 			sup_pnt_dict_final_all[stock_date_list_temp[idx_temp]] = copy.deepcopy(sup_pnt_dict_final)
-		stock_tech_idx_dict = self.combine_sup_pnt(stock_tech_idx_dict, sup_pnt_dict_final_all)
+		stock_tech_idx_dict = self.combine_pnt(stock_tech_idx_dict, sup_pnt_dict_final_all, 'Supported_point')
+		return stock_tech_idx_dict
+
+	def get_pressed_point(self, file_path, stock_tech_idx_dict, press_pnt_close_interval=100, valid_percentage_press_pnt_threthod=0.5):
+		first_date = (list(stock_tech_idx_dict.keys())[0])
+		first_date_num = self.get_date_num(first_date)
+
+		interval_value_point = 2
+		press_pnt_dict_final_all = {}
+		Open_last, High_last, Low_last, Close_last, Volume_last = 0, 0, 0, 0, 0
+		stock_close_list_temp = []
+		stock_volume_list_temp = []
+		stock_date_list_temp = []
+		with open(file_path, 'r') as file_read:
+			for line in file_read.readlines():
+				line = line.split(',')
+				if line[0] == 'Date':
+					continue
+				Date, Open, High, Low, Close, Adj_Close, Volume = line[0], line[1], line[2], line[3], line[4], line[5], (line[6].strip('\n'))
+				#print (Open, Volume)
+				if Open == 'null' or High == 'null' or Low == 'null' or Close == 'null' or Volume == 'null':
+					Open, High, Low, Close, Volume = Open_last, High_last, Low_last, Close_last, Volume_last
+				if self.get_date_num(Date) < first_date_num:
+					continue
+				stock_close_list_temp.append(float(Close))
+				stock_volume_list_temp.append(int(Volume))
+				stock_date_list_temp.append(Date)
+				Open_last, High_last, Low_last, Close_last, Volume_last = Open, High, Low, Close, Volume
+
+		pass_drop_rate = 0.1
+		next_drop_rate = 0.1
+		close_max = -1
+		valid_percentage_press_pnt_threthod = 0.5
+		for idx_temp, Close_temp in enumerate(stock_close_list_temp):
+			press_list = []
+			stock_close_list = stock_close_list_temp[0:idx_temp+1]
+			stock_date_list = stock_date_list_temp[0:idx_temp+1]
+			stock_volume_list = stock_volume_list_temp[0:idx_temp+1]
+			for idx, Close in enumerate(stock_close_list):
+				close_max = Close if Close > close_max else close_max
+				close_interval = round((close_max / press_pnt_close_interval), interval_value_point)
+
+				if idx < self.period_days or idx+self.period_days > len(stock_close_list):
+					continue
+
+				Close_five_days_pass_max = max(stock_close_list[idx-self.period_days:idx])
+				if Close <= Close_five_days_pass_max:
+					continue
+				Close_five_days_pass_min = min(stock_close_list[idx-self.period_days:idx])
+				if Close < Close_five_days_pass_min*(1+pass_drop_rate):
+					continue
+				Close_five_days_next_min = min(stock_close_list[idx+1:idx+1+self.period_days])
+				if Close < Close_five_days_next_min*(1+next_drop_rate):
+					continue
+				Close_five_days_next_max = max(stock_close_list[idx+1:idx+1+self.period_days])
+				if Close < Close_five_days_next_max:
+					continue
+
+				Volume_sum = self.get_interval_volume_sum(stock_close_list[idx-self.period_days:idx+1+self.period_days], \
+												stock_volume_list[idx-self.period_days:idx+1+self.period_days], \
+												idx, Close_five_days_pass_max, Close_five_days_next_max, \
+												stock_date_list)
+
+				press_dict = {'Date': stock_date_list[idx],
+								'Volume_sum': Volume_sum,
+								'Close': Close,
+								#'Close_list': stock_close_list[idx-self.period_days:idx+1+self.period_days],
+								#'Close_five_days_pass_max': Close_five_days_pass_max,
+								#'Close_five_days_next_max': Close_five_days_next_max,
+								}
+				#Volume_Value_max = Close*stock_dict[stock_date_list[idx]]['Volume'] if Close*stock_dict[stock_date_list[idx]]['Volume'] > Volume_Value_max else Volume_Value_max
+				#Volume_max = stock_dict[stock_date_list[idx]]['Volume'] if stock_dict[stock_date_list[idx]]['Volume'] > Volume_max else Volume_max
+				press_list.append(press_dict)
+			press_pnt_dict_final = self.process_pnt_list_to_interval(press_list, sup_pnt_close_interval, close_interval, interval_value_point, valid_percentage_press_pnt_threthod)
+			press_pnt_dict_final_all[stock_date_list_temp[idx_temp]] = copy.deepcopy(press_pnt_dict_final)
+		stock_tech_idx_dict = self.combine_pnt(stock_tech_idx_dict, press_pnt_dict_final_all, 'Pressed_point')
 		return stock_tech_idx_dict
 
 	def get_KD(self, csv_path, stock_tech_idx_dict, nBin=5, nKD=9, m=1500):
@@ -630,14 +710,15 @@ class Trader(object):
 	def output_tech_idx(self, tech_idx_path, stock_tech_idx_dict):
 		with open(tech_idx_path, 'w', newline='') as csvfile:
 			writer = csv.writer(csvfile)
-			writer.writerow(['idx', 'date', 'Close', 'MA', 'MACD', 'D', 'RSI', 'Supported_point'])
+			writer.writerow(['idx', 'date', 'Close', 'MA', 'MACD', 'D', 'RSI', 'Supported_point', 'Pressed_point'])
 			for index, date in enumerate(stock_tech_idx_dict.keys()):
 				#print (index)
 				#print (date)
 				writer.writerow([index, date, stock_tech_idx_dict[date]['Close']\
 					, stock_tech_idx_dict[date]['MA'], stock_tech_idx_dict[date]['MACD']\
 					, stock_tech_idx_dict[date]['D'], stock_tech_idx_dict[date]['RSI']\
-					, json.dumps(stock_tech_idx_dict[date]['Supported_point'])])
+					, json.dumps(stock_tech_idx_dict[date]['Supported_point'])\
+					, json.dumps(stock_tech_idx_dict[date]['Pressed_point'])])
 
 	def get_MA(self, CSV, stock_tech_idx_dict, Total_day=10*250, percent=1): #Slew_keep_day, 
 		'''
@@ -1826,6 +1907,8 @@ def main_best_contract():
 	m = 5*250
 	valid_percentage_sup_pnt_threthod = 0.5
 	sup_pnt_close_interval = 100
+	valid_percentage_press_pnt_threthod = 0.5
+	press_pnt_close_interval = 100
 
 	MACD_short=12
 	MACD_long=26
@@ -1840,7 +1923,7 @@ def main_best_contract():
 	stock_tech_idx_dict = t.get_MACD(file_path, stock_tech_idx_dict, Total_day_MACD=m, MACD_short=MACD_short, MACD_long=MACD_long, MACD_signallength=MACD_signallength)
 
 	stock_tech_idx_dict = t.get_supported_point(file_path, stock_tech_idx_dict, sup_pnt_close_interval=sup_pnt_close_interval, valid_percentage_sup_pnt_threthod=valid_percentage_sup_pnt_threthod)
-	print (stock_tech_idx_dict)
+	stock_tech_idx_dict = t.get_pressed_point(file_path, stock_tech_idx_dict, press_pnt_close_interval=sup_press_close_interval, valid_percentage_press_pnt_threthod=valid_percentage_press_pnt_threthod)
 
 	t.output_tech_idx(tech_idx_path, stock_tech_idx_dict)
 	#print (time.time()-start)

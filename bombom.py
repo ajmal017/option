@@ -1904,7 +1904,7 @@ def main_best_contract():
 
 	#import time
 	#start = time.time()
-	m = 5*250
+	m = 20*250
 	valid_percentage_sup_pnt_threthod = 0.5
 	sup_pnt_close_interval = 100
 	valid_percentage_press_pnt_threthod = 0.5

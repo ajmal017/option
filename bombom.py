@@ -474,10 +474,10 @@ class Trader(object):
 
 	@staticmethod
 	def combine_pnt(stock_tech_idx_dict, pnt_dict_final_all, pnt_type):
-		if pnt_type == 'Supported_point'
+		if pnt_type == 'Supported_point':
 			for date in stock_tech_idx_dict.keys():
 				stock_tech_idx_dict[date]['Supported_point'] = pnt_dict_final_all[date]
-		elif pnt_type == 'Pressed_point'
+		elif pnt_type == 'Pressed_point':
 			for date in stock_tech_idx_dict.keys():
 				stock_tech_idx_dict[date]['Pressed_point'] = pnt_dict_final_all[date]
 		else:
@@ -661,7 +661,7 @@ class Trader(object):
 				#Volume_Value_max = Close*stock_dict[stock_date_list[idx]]['Volume'] if Close*stock_dict[stock_date_list[idx]]['Volume'] > Volume_Value_max else Volume_Value_max
 				#Volume_max = stock_dict[stock_date_list[idx]]['Volume'] if stock_dict[stock_date_list[idx]]['Volume'] > Volume_max else Volume_max
 				press_list.append(press_dict)
-			press_pnt_dict_final = self.process_pnt_list_to_interval(press_list, sup_pnt_close_interval, close_interval, interval_value_point, valid_percentage_press_pnt_threthod)
+			press_pnt_dict_final = self.process_pnt_list_to_interval(press_list, press_pnt_close_interval, close_interval, interval_value_point, valid_percentage_press_pnt_threthod)
 			press_pnt_dict_final_all[stock_date_list_temp[idx_temp]] = copy.deepcopy(press_pnt_dict_final)
 		stock_tech_idx_dict = self.combine_pnt(stock_tech_idx_dict, press_pnt_dict_final_all, 'Pressed_point')
 		return stock_tech_idx_dict
@@ -1923,7 +1923,7 @@ def main_best_contract():
 	stock_tech_idx_dict = t.get_MACD(file_path, stock_tech_idx_dict, Total_day_MACD=m, MACD_short=MACD_short, MACD_long=MACD_long, MACD_signallength=MACD_signallength)
 
 	stock_tech_idx_dict = t.get_supported_point(file_path, stock_tech_idx_dict, sup_pnt_close_interval=sup_pnt_close_interval, valid_percentage_sup_pnt_threthod=valid_percentage_sup_pnt_threthod)
-	stock_tech_idx_dict = t.get_pressed_point(file_path, stock_tech_idx_dict, press_pnt_close_interval=sup_press_close_interval, valid_percentage_press_pnt_threthod=valid_percentage_press_pnt_threthod)
+	stock_tech_idx_dict = t.get_pressed_point(file_path, stock_tech_idx_dict, press_pnt_close_interval=press_pnt_close_interval, valid_percentage_press_pnt_threthod=valid_percentage_press_pnt_threthod)
 
 	t.output_tech_idx(tech_idx_path, stock_tech_idx_dict)
 	#print (time.time()-start)

@@ -22,6 +22,14 @@
 # 20191027
 # 1. 要卡+ or - 的distance
 
+# 20191116
+# 1. 找contract的履約價跟我們close的價差delta_d，去歷史看在到履約日期內的時間長度delta_p，有幾次會下跌or上漲delta_p
+#    ->幾天後，下跌or上漲delta_p的機率
+# 2. 再考慮各種技術指標的組合情況
+
+# 20191117
+# 1. some bug in do_back_testing()
+
 import sys
 #sys.path.insert(0, '/home/ckwang/.local/lib/python2.7/site-packages')
 #sys.path.insert(0, '/usr/local/lib/python3.5/dist-packages')
@@ -53,6 +61,11 @@ import json
 
 # dary
 import operator
+
+import datetime
+from datetime import timedelta
+from datetime import date
+
 
 #print (finviz.get_stock('AMD'))
 #assert False
@@ -112,10 +125,149 @@ class Trader(object):
 		self.PCS_return_on_invest = 0.03
 		self.CCS_return_on_invest = 0.03
 
-	#contract_dict = {'contractSymbol': -1, \
-	#					'bid': -1, \
-	#					'ask': -1, \
-	#					'strike': -1}
+	# supported_point: 確認strike跟close中間有supported_point
+	@staticmethod
+	def check_vaild_sample(do_tech_idx_dict, today_tech_idx, strike_price):
+		for tech_idx in do_tech_idx_dict.keys():
+			if 'Supported_point' in tech_idx:
+				close_value = today_tech_idx['Close'].values
+				Supported_point_dict = json.loads(u'{}'.format(do_tech_idx_dict[tech_idx][0]))
+				with_sup_pnt_flag = False
+				for sup_pnt_value in Supported_point_dict.keys():
+					if close_value > float(sup_pnt_value) and float(sup_pnt_value) > strike_price:
+						with_sup_pnt_flag = True
+				if not with_sup_pnt_flag:
+					return False
+
+			elif 'Pressed_point' in tech_idx:
+				close_value = today_tech_idx['Close'].values
+				Pressed_point_dict = json.loads(u'{}'.format(do_tech_idx_dict[tech_idx][0]))
+				with_press_pnt_flag = False
+				for press_pnt_value in Pressed_point_dict.keys():
+					if close_value < float(press_pnt_value) and float(press_pnt_value) < strike_price:
+						with_press_pnt_flag = True
+				if not with_press_pnt_flag:
+					return False
+
+			else: # Close,MA,MACD,D,RSI,Supported_point,Pressed_point
+				try:
+
+					if not (int(do_tech_idx_dict[tech_idx]) == int(today_tech_idx[tech_idx].values)):
+						return False
+				except:
+					print (do_tech_idx_dict, today_tech_idx)
+					print ((int(do_tech_idx_dict[tech_idx]), int(today_tech_idx[tech_idx].values)))
+		return True
+
+	@staticmethod
+	def get_date_diff(date1, date2):
+		datetimeFormat = '%Y-%m-%d %H:%M:%S.%f'
+		date1 = '{} 10:01:28.585'.format(date1[0])
+		date2 = '{} 09:56:28.067'.format(date2)
+		diff = datetime.datetime.strptime(date1, datetimeFormat) - datetime.datetime.strptime(date2, datetimeFormat)
+		return diff.days
+
+	def do_back_testing(self, tech_idx_path, close, strike_price, strike_date, do_tech_idx_dict, typ):
+		# Input:
+		#		tech_idx_path: the path of tech index csv file
+		#		delta_d: the time length of tody ~ strike date -> 幾天後
+		#		delta_p: the different of price between close of today and strike price 
+		#			-> strike_price - today_close
+		#		do_tech_idx_dict: {'MA': 1, 'RSI': 3, 'Supported_point': {'31': 1, '37': 0.85...}}
+		#		typ: SP or BP
+		# Output:
+		#		在detla_d的時間間隔內，且起始日期符合do_tech_idx_dict的條件的樣本，不會產生detla_p的價格幅度
+		# 1. 確認是有效樣本（技術指標符合）
+		# 2. 確認delta_d天後的漲跌幅是否<delta_p
+		# 3. update
+
+		delta_d = self.get_date_diff(strike_date, date.today().strftime("%Y-%m-%d"))
+		delta_p = strike_price - close # future - now
+		df = pd.read_csv(tech_idx_path)
+		df_shape = df.shape
+		reuslt_dict = {'all': 0, 'pos': 0}
+		for num_of_date in range(1, df_shape[0]-delta_d):
+			row = df[:][num_of_date:num_of_date+1] # Close,MA,MACD,D,RSI,Supported_point,Pressed_point
+			print (row)
+			if not self.check_vaild_sample(do_tech_idx_dict, row, strike_price):
+				continue
+			reuslt_dict['all']+=1
+			row_future = df[:][num_of_date+delta_d:num_of_date+delta_d+1]
+			if typ == 'put':
+				# 歷史資料future - now > 該合約
+				if row_future['Close'].values - row['Close'].values > strike_price - close:
+					reuslt_dict['pos']+=1
+			elif typ == 'call':
+				# 歷史資料future - now < 該合約
+				if row_future['Close'].values - row['Close'].values < strike_price - close:
+					reuslt_dict['pos']+=1
+			else:
+				assert False, 'wrong with contract type in do_back_testing'
+		return reuslt_dict['pos'] / reuslt_dict['all']
+
+	@staticmethod
+	def get_back_testing_bechmark_keyvalues(keys_all, row_lasted):
+		bechmark_dict = {}
+		keys_list = keys_all.split('-')
+		#print (row_lasted, keys_list, keys_all)
+		for key in keys_list:
+			bechmark_dict[key] = row_lasted[key].values
+		return bechmark_dict, keys_all
+
+	def back_testing(self, tech_idx_path, options_contract_file_path):
+		# 1. 找contract的履約價跟我們close的價差delta_p，去歷史看在到履約日期內的時間長度delta_d，
+		#		有幾次會下跌or上漲delta_p的機率
+		# 2. 再考慮各種技術指標的組合情況
+		# MA MACD D RSI
+		# 1 1 1 1
+		# 1 1 1 0
+		# 1 1 0 1
+		# 1 1 0 0
+		# 1 0 1 1
+		# 1 0 1 0
+		# 1 0 0 1
+		# 1 0 0 0
+
+
+
+		keys_list = ['MA-MACD-D-RSI', 'MA-MACD-D', 'MA-MACD-RSI', 'MA-MACD', \
+					'MA-D-RSI', 'MA-D', 'MA-RSI', 'MA', \
+					'MACD-D-RSI', 'MACD-D', 'MACD-RSI', 'MACD', \
+					'D-RSI', 'D', 'RSI']
+
+
+		#print (tech_idx_path)
+		df_tech_idx = pd.read_csv(tech_idx_path)
+		close_value = -1
+		row_lasted = -1
+		#print (df_tech_idx.shape)
+		#input('df_tech_idx')
+		for num in range(1, df_tech_idx.shape[0]):
+			row_lasted = df_tech_idx[:][num:num+1]
+			close_value = row_lasted['Close'].values
+
+		df_contracts = pd.read_csv(options_contract_file_path)
+		for num_contracts in range(1, df_contracts.shape[0]):
+			row_contracts = df_contracts[:][num_contracts:num_contracts+1]
+			typ = row_contracts['type'].values
+			strike_price = row_contracts['strike'].values
+			strike_date = row_contracts['date'].values
+
+
+			#print (df_tech_idx)
+			#input('wait')
+
+			win_probability_dict = {}
+			#for strike_price in :
+			#	for strike_date in :
+			if True:
+						for keys in keys_list:
+							keys_all = '{}-{}'.format(keys, 'Supported_point') if typ == 'put' else '{}-{}'.format(keys, 'Pressed_point')
+							do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
+
+							win_probability = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
+							win_probility_dict[keys_all] = win_probability
+
 	def get_best_combination_contract(self, sell_contracts_list, buy_contracts_list, contract_type):
 		#print (sell_contracts_list)
 		PCS_combin_contract_list = []
@@ -254,7 +406,7 @@ class Trader(object):
 							round(result_all['moving_average'][lasted_date]['K'], 3), \
 							round(result_all['moving_average'][lasted_date]['D'], 3)])
 							'''
-		print (options_file_path)
+		#print (options_file_path)
 		df = pd.read_csv(options_file_path)
 		df_shape = df.shape
 		type_last = ''
@@ -283,7 +435,7 @@ class Trader(object):
 			if (row['type'].values != type_last or row['date'].values != date_last):
 				#del contracts_list[-1]
 				combin_contract_list = self.get_best_combination_contract(contracts_list[:-2], contracts_list[:-2], type_last)
-				print (combin_contract_list)#, row['type'].values, row['date'].values)
+				#print (combin_contract_list)#, row['type'].values, row['date'].values)
 				if not combin_contract_list== []:
 					assert False
 				contracts_list = []
@@ -1871,7 +2023,7 @@ def main_update_lookuptable():
 	roe_ttm = 1
 	t = Trader(period_days, difference_rate, stock_folder_path, options_folder_path, roe_ttm)
 
-	stock_name = 'AMD'#''
+	stock_name = 'ZION'#''
 	file_path = 'stocks/{}.csv'.format(stock_name)
 	tech_idx_path = 'techidx/{}.csv'.format(stock_name)
 
@@ -1898,7 +2050,7 @@ def main_best_contract():
 	roe_ttm = 1
 	t = Trader(period_days, difference_rate, stock_folder_path, options_folder_path, roe_ttm)
 
-	stock_name = 'AMD'#''
+	stock_name = 'ZION'# ZION AMD
 	file_path = 'stocks/{}.csv'.format(stock_name)
 	tech_idx_path = 'techidx/{}.csv'.format(stock_name)
 
@@ -1929,8 +2081,22 @@ def main_best_contract():
 	#print (time.time()-start)
 	#print (stock_tech_idx_dict)
 
+def main_back_testing():
+	period_days = 5
+	difference_rate = 0.1
+	stock_folder_path = 'stocks'
+	options_folder_path = 'options'
+	roe_ttm = 1
+	t = Trader(period_days, difference_rate, stock_folder_path, options_folder_path, roe_ttm)
+
+	stock_name = 'ZION'# ZION AMD
+	options_contract_file_path = 'options/{}.csv'.format(stock_name)
+	tech_idx_path = 'techidx/{}.csv'.format(stock_name)
+	t.back_testing(tech_idx_path, options_contract_file_path)
+
 if __name__ == '__main__':
 	#main()
 	#main_update_lookuptable()
-	main_best_contract()
+	#main_best_contract()
 	#main_test()
+	main_back_testing()

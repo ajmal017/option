@@ -163,7 +163,7 @@ class Trader(object):
 	@staticmethod
 	def get_date_diff(date1, date2):
 		datetimeFormat = '%Y-%m-%d %H:%M:%S.%f'
-		date1 = '{} 10:01:28.585'.format(date1[0])
+		date1 = '{} 10:01:28.585'.format(date1)
 		date2 = '{} 09:56:28.067'.format(date2)
 		diff = datetime.datetime.strptime(date1, datetimeFormat) - datetime.datetime.strptime(date2, datetimeFormat)
 		return diff.days
@@ -184,12 +184,12 @@ class Trader(object):
 
 		delta_d = self.get_date_diff(strike_date, dt.today().strftime("%Y-%m-%d"))
 		print ('strike_date: {}	do_tech_idx_dict: {}'.format(strike_date, do_tech_idx_dict.keys()))
-		if delta_d > 60:
-			return
+		#if delta_d > 60:
+		#	return
 		delta_p = strike_price - close # future - now
 		df = pd.read_csv(tech_idx_path)
 		df_shape = df.shape
-		reuslt_dict = {'all': 0, 'pos': 0}
+		reuslt_dict = {'all': 0, 'unhit': 0}
 		for num_of_date in range(1, df_shape[0]-delta_d):
 			row = df[:][num_of_date:num_of_date+1] # Close,MA,MACD,D,RSI,Supported_point,Pressed_point
 			#print ('row: ', row, ' num_of_date: ', num_of_date, ' df_shape: ', df_shape, ' delta_d: ', delta_d)
@@ -200,14 +200,16 @@ class Trader(object):
 			if typ == 'put':
 				# 歷史資料future - now > 該合約
 				if row_future['Close'].values - row['Close'].values > strike_price - close:
-					reuslt_dict['pos']+=1
+					reuslt_dict['unhit']+=1
 			elif typ == 'call':
 				# 歷史資料future - now < 該合約
 				if row_future['Close'].values - row['Close'].values < strike_price - close:
-					reuslt_dict['pos']+=1
+					reuslt_dict['unhit']+=1
 			else:
 				assert False, 'wrong with contract type in do_back_testing'
-		return reuslt_dict['pos'] / (reuslt_dict['all']+0.00001)
+		if reuslt_dict['all'] == 0:
+			return 0.0
+		return reuslt_dict
 
 	@staticmethod
 	def get_back_testing_bechmark_keyvalues(keys_all, row_lasted):
@@ -234,48 +236,76 @@ class Trader(object):
 
 
 
-		keys_list = ['MA-MACD-D-RSI', 'MA-MACD-D', 'MA-MACD-RSI', 'MA-MACD', \
-					'MA-D-RSI', 'MA-D', 'MA-RSI', 'MA', \
-					'MACD-D-RSI', 'MACD-D', 'MACD-RSI', 'MACD', \
-					'D-RSI', 'D', 'RSI', '']
+		keys_list = ['MA-MACD-D-RSI']#['MA-MACD-D-RSI', 'MA-MACD-D', 'MA-MACD-RSI', 'MA-MACD', \
+					#'MA-D-RSI', 'MA-D', 'MA-RSI', 'MA', \
+					#'MACD-D-RSI', 'MACD-D', 'MACD-RSI', 'MACD', \
+					#'D-RSI', 'D', 'RSI', '']
 
 		#print (tech_idx_path)
 		df_tech_idx = pd.read_csv(tech_idx_path)
 		close_value = -1
 		row_lasted = -1
-		#print (df_tech_idx.shape)
-		#input('df_tech_idx')
+
 		for num in range(1, df_tech_idx.shape[0]):
 			row_lasted = df_tech_idx[:][num:num+1]
-			close_value = row_lasted['Close'].values
+		#	close_value = row_lasted['Close'].values
+		print (combin_contract_list_all)
+		#df_contracts = pd.read_csv(options_contract_file_path)
+		#for num_contracts in range(1, df_contracts.shape[0]):
+		#	row_contracts = df_contracts[:][num_contracts:num_contracts+1]
+		#	typ = row_contracts['type'].values
+		#	strike_price = row_contracts['strike'].values
+		#	strike_date = row_contracts['date'].values
+		#	print ('strike_price: {} 	strike_date: {}'.format(strike_price, strike_date))
+		win_probability_dict_buy = {}
+		win_probability_dict_sell = {}
 
-		df_contracts = pd.read_csv(options_contract_file_path)
-		for num_contracts in range(1, df_contracts.shape[0]):
-			row_contracts = df_contracts[:][num_contracts:num_contracts+1]
-			typ = row_contracts['type'].values
-			strike_price = row_contracts['strike'].values
-			strike_date = row_contracts['date'].values
-			print ('strike_price: {} 	strike_date: {}'.format(strike_price, strike_date))
+		for combin_contract_list in combin_contract_list_all:
+			for combin_contract in combin_contract_list:
+				close_value = combin_contract['lasted_close']
+				typ = combin_contract['contract_type'][0]
+				# sell part
+				strike_price = combin_contract['sell_strike_price']
+				strike_date = combin_contract['sell_strike_date']
+				for keys in keys_list:
+					if typ == 'put':
+						keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
+					elif typ == 'call':
+						keys_all = '{}-{}'.format(keys, 'Pressed_point') if keys != '' else 'Pressed_point'
+					else:
+						assert False, 'wrong with contract type: {}'.format(typ)
+					do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
+					probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
+					win_probability_dict_sell[keys_all] = copy.deepcopy(probability_reuslt_dict['unhit'] / probability_reuslt_dict['all'])
 
-			win_probability_dict = {}
+				for keys_all in keys_list[:-1]:
+					do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
+					probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
+					win_probability_dict_sell[keys_all] = copy.deepcopy(probability_reuslt_dict['unhit'] / probability_reuslt_dict['all'])
+				print (win_probability_dict_sell)
 
-			for keys in keys_list:
+				# buy part
+				strike_price = combin_contract['buy_strike_price']
+				strike_date = combin_contract['buy_strike_date']
+				for keys in keys_list:
+					if typ == 'put':
+						keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
+					elif typ == 'call':
+						keys_all = '{}-{}'.format(keys, 'Pressed_point') if keys != '' else 'Pressed_point'
+					else:
+						assert False, 'wrong with contract type: {}'.format(typ)
+					do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
+					probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
+					win_probability_dict_buy[keys_all] = copy.deepcopy((probability_reuslt_dict['all'] - probability_reuslt_dict['unhit']) / probability_reuslt_dict['all'])
+
+				for keys_all in keys_list[:-1]:
+					do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
+					probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
+					win_probability_dict_buy[keys_all] = copy.deepcopy((probability_reuslt_dict['all'] - probability_reuslt_dict['unhit']) / probability_reuslt_dict['all'])
+				if typ == 'call':
+					print (win_probability_dict_sell['MA-MACD-D-RSI-Pressed_point'] * combin_contract['return_on_invest'] - win_probability_dict_buy['MA-MACD-D-RSI-Pressed_point'] * combin_contract['risk_max'])
 				if typ == 'put':
-					keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
-				elif typ == 'call':
-					keys_all = '{}-{}'.format(keys, 'Pressed_point') if keys != '' else 'Pressed_point'
-				else:
-					assert False, 'wrong with contract type: {}'.format(typ)
-				#keys_all = '{}-{}'.format(keys, 'Supported_point') if typ == 'put' else '{}-{}'.format(keys, 'Pressed_point')
-				do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
-				win_probability = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
-				win_probability_dict[keys_all] = win_probability
-
-			for keys_all in keys_list[:-1]:
-				do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
-				win_probability = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
-				win_probability_dict[keys_all] = win_probability
-			print (win_probability_dict)
+					print (win_probability_dict_sell['MA-MACD-D-RSI-Supported_point'] * combin_contract['return_on_invest'] - win_probability_dict_buy['MA-MACD-D-RSI-Supported_point'] * combin_contract['risk_max'])
 
 	def get_best_combination_contract(self, sell_contracts_list, buy_contracts_list, contract_type):
 		#print (sell_contracts_list)
@@ -292,6 +322,11 @@ class Trader(object):
 											'return_on_invest': -1, \
 											'risk_max': -1, \
 											'string': -1, \
+											'sell_strike_date': -1, \
+											'buy_strike_date': -1, \
+											'sell_strike_price': -1, \
+											'buy_strike_price': -1, \
+											'contract_type': contract_type, \
 											'lasted_close': sell_contracts_dict['lasted_close']}
 					sell_bid = float(sell_contracts_dict['bid'])
 					buy_ask = float(buy_contracts_dict['ask'])
@@ -318,6 +353,10 @@ class Trader(object):
 						continue
 					combin_contract_dict['sell_contractSymbol'] = copy.deepcopy(sell_contracts_dict['contractSymbol'][0])
 					combin_contract_dict['buy_contractSymbol'] = copy.deepcopy(buy_contracts_dict['contractSymbol'][0])
+					combin_contract_dict['sell_strike_date'] = copy.deepcopy(sell_contracts_dict['date'][0])
+					combin_contract_dict['buy_strike_date'] = copy.deepcopy(buy_contracts_dict['date'][0])
+					combin_contract_dict['sell_strike_price'] = copy.deepcopy(sell_contracts_dict['strike'][0])
+					combin_contract_dict['buy_strike_price'] = copy.deepcopy(buy_contracts_dict['strike'][0])
 					combin_contract_dict['string'] = sell_contracts_dict['put_string']
 					combin_contract_dict_temp = copy.deepcopy(combin_contract_dict)
 					PCS_combin_contract_list.append(combin_contract_dict_temp)
@@ -333,6 +372,11 @@ class Trader(object):
 											'return_on_invest': -1, \
 											'risk_max': -1, \
 											'string': -1, \
+											'sell_strike_date': -1, \
+											'buy_strike_date': -1, \
+											'sell_strike_price': -1, \
+											'buy_strike_price': -1, \
+											'contract_type': contract_type, \
 											'lasted_close': sell_contracts_dict['lasted_close']}
 					sell_bid = float(sell_contracts_dict['bid'])
 					buy_ask = float(buy_contracts_dict['ask'])
@@ -356,6 +400,10 @@ class Trader(object):
 						continue
 					combin_contract_dict['sell_contractSymbol'] = copy.deepcopy(sell_contracts_dict['contractSymbol'][0])
 					combin_contract_dict['buy_contractSymbol'] = copy.deepcopy(buy_contracts_dict['contractSymbol'][0])
+					combin_contract_dict['sell_strike_date'] = copy.deepcopy(sell_contracts_dict['date'][0])
+					combin_contract_dict['buy_strike_date'] = copy.deepcopy(buy_contracts_dict['date'][0])
+					combin_contract_dict['sell_strike_price'] = copy.deepcopy(sell_contracts_dict['strike'][0])
+					combin_contract_dict['buy_strike_price'] = copy.deepcopy(buy_contracts_dict['strike'][0])
 					combin_contract_dict['string'] = sell_contracts_dict['call_string']
 					combin_contract_dict_temp = copy.deepcopy(combin_contract_dict)
 					CCS_combin_contract_list.append(combin_contract_dict_temp)
@@ -447,7 +495,7 @@ class Trader(object):
 			contract_dict['lasted_close'] = lasted_close
 			contract_dict = copy.deepcopy(contract_dict)
 			contracts_list.append(contract_dict)
-			delta_d = self.get_date_diff(row['date'].values, dt.today().strftime("%Y-%m-%d"))
+			delta_d = self.get_date_diff(row['date'].values[0], dt.today().strftime("%Y-%m-%d"))
 			#print (row['date'].values, delta_d, delta_d>300, type(delta_d))
 			if delta_d > 300:
 				continue
@@ -455,7 +503,7 @@ class Trader(object):
 			if (row['type'].values != type_last or row['date'].values != date_last):
 				#del contracts_list[-1]
 				combin_contract_list = self.get_best_combination_contract(contracts_list[:-2], contracts_list[:-2], type_last)
-				combin_contract_list_all.extend(combin_contract_list)
+				combin_contract_list_all.append(combin_contract_list)
 				#print (combin_contract_list, type_last)
 				#print (combin_contract_list)#, row['type'].values, row['date'].values)
 				#if not combin_contract_list== []:

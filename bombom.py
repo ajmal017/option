@@ -151,12 +151,14 @@ class Trader(object):
 
 			else: # Close,MA,MACD,D,RSI,Supported_point,Pressed_point
 				try:
-
 					if not (int(do_tech_idx_dict[tech_idx]) == int(today_tech_idx[tech_idx].values)):
 						return False
 				except:
-					print (do_tech_idx_dict, today_tech_idx)
-					print ((int(do_tech_idx_dict[tech_idx]), int(today_tech_idx[tech_idx].values)))
+					print ('2-1: ', do_tech_idx_dict)
+					print ('2-2: ', today_tech_idx)
+					print ('2-3: ', int(do_tech_idx_dict[tech_idx]))
+					print ('2-4: ', int(today_tech_idx[tech_idx].values))
+					assert False
 		return True
 
 	@staticmethod
@@ -182,13 +184,16 @@ class Trader(object):
 		# 3. update
 
 		delta_d = self.get_date_diff(strike_date, date.today().strftime("%Y-%m-%d"))
+		print ('strike_date: {}	do_tech_idx_dict: {}'.format(strike_date, do_tech_idx_dict.keys()))
+		if delta_d > 60:
+			return
 		delta_p = strike_price - close # future - now
 		df = pd.read_csv(tech_idx_path)
 		df_shape = df.shape
 		reuslt_dict = {'all': 0, 'pos': 0}
 		for num_of_date in range(1, df_shape[0]-delta_d):
 			row = df[:][num_of_date:num_of_date+1] # Close,MA,MACD,D,RSI,Supported_point,Pressed_point
-			print (row)
+			#print ('row: ', row, ' num_of_date: ', num_of_date, ' df_shape: ', df_shape, ' delta_d: ', delta_d)
 			if not self.check_vaild_sample(do_tech_idx_dict, row, strike_price):
 				continue
 			reuslt_dict['all']+=1
@@ -203,7 +208,7 @@ class Trader(object):
 					reuslt_dict['pos']+=1
 			else:
 				assert False, 'wrong with contract type in do_back_testing'
-		return reuslt_dict['pos'] / reuslt_dict['all']
+		return reuslt_dict['pos'] / (reuslt_dict['all']+0.00001)
 
 	@staticmethod
 	def get_back_testing_bechmark_keyvalues(keys_all, row_lasted):
@@ -233,8 +238,7 @@ class Trader(object):
 		keys_list = ['MA-MACD-D-RSI', 'MA-MACD-D', 'MA-MACD-RSI', 'MA-MACD', \
 					'MA-D-RSI', 'MA-D', 'MA-RSI', 'MA', \
 					'MACD-D-RSI', 'MACD-D', 'MACD-RSI', 'MACD', \
-					'D-RSI', 'D', 'RSI']
-
+					'D-RSI', 'D', 'RSI', '']
 
 		#print (tech_idx_path)
 		df_tech_idx = pd.read_csv(tech_idx_path)
@@ -252,21 +256,27 @@ class Trader(object):
 			typ = row_contracts['type'].values
 			strike_price = row_contracts['strike'].values
 			strike_date = row_contracts['date'].values
-
-
-			#print (df_tech_idx)
-			#input('wait')
+			print ('strike_price: {} 	strike_date: {}'.format(strike_price, strike_date))
 
 			win_probability_dict = {}
-			#for strike_price in :
-			#	for strike_date in :
-			if True:
-						for keys in keys_list:
-							keys_all = '{}-{}'.format(keys, 'Supported_point') if typ == 'put' else '{}-{}'.format(keys, 'Pressed_point')
-							do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
 
-							win_probability = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
-							win_probility_dict[keys_all] = win_probability
+			for keys in keys_list:
+				if typ == 'put':
+					keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
+				elif typ == 'call':
+					keys_all = '{}-{}'.format(keys, 'Pressed_point') if keys != '' else 'Pressed_point'
+				else:
+					assert False, 'wrong with contract type: {}'.format(typ)
+				#keys_all = '{}-{}'.format(keys, 'Supported_point') if typ == 'put' else '{}-{}'.format(keys, 'Pressed_point')
+				do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
+				win_probability = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
+				win_probability_dict[keys_all] = win_probability
+
+			for keys_all in keys_list[:-1]:
+				do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
+				win_probability = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
+				win_probability_dict[keys_all] = win_probability
+			print (win_probability_dict)
 
 	def get_best_combination_contract(self, sell_contracts_list, buy_contracts_list, contract_type):
 		#print (sell_contracts_list)
@@ -377,7 +387,7 @@ class Trader(object):
 				break
 			bear_point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], 2), round(1-(float(interval_dict['Interval'].split('_')[0])/lasted_close), 2))
 
-		'''
+#		'''
 		with open(options_file_path, 'w', newline='') as csvfile:
 			writer = csv.writer(csvfile)
 			writer.writerow(['type', 'date', 'contractSymbol', 'strike', 'bid', \
@@ -405,7 +415,10 @@ class Trader(object):
 							lasted_situation_type, \
 							round(result_all['moving_average'][lasted_date]['K'], 3), \
 							round(result_all['moving_average'][lasted_date]['D'], 3)])
-							'''
+#							'''
+
+		return
+
 		#print (options_file_path)
 		df = pd.read_csv(options_file_path)
 		df_shape = df.shape
@@ -2092,6 +2105,17 @@ def main_back_testing():
 	stock_name = 'ZION'# ZION AMD
 	options_contract_file_path = 'options/{}.csv'.format(stock_name)
 	tech_idx_path = 'techidx/{}.csv'.format(stock_name)
+	file_path = 'stocks/{}.csv'.format(stock_name)
+	result_all = t.get_supporting_point(stock_name, file_path)
+
+	sav_stock_csv_path = '{}.csv'.format(os.path.join(t.stock_folder_path, stock_name))
+	options_file_path = '{}.csv'.format(os.path.join(t.option_folder_path, stock_name))
+	options_com_order_csv_path = '{}.csv'.format(os.path.join(t.option_com_order_folder_path, stock_name))
+
+
+	t.output_report(stock_name, options_file_path, options_com_order_csv_path, result_all)
+
+	#t.output_report(stock_name, options_contract_file_path, result_all)
 	t.back_testing(tech_idx_path, options_contract_file_path)
 
 if __name__ == '__main__':

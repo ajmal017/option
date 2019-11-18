@@ -45,7 +45,6 @@ import os
 from pandas_datareader import data as pdr
 import matplotlib.pyplot as plt
 #import fix_yahoo_finance as yf
-import datetime
 
 import finviz
 import copy
@@ -64,7 +63,7 @@ import operator
 
 import datetime
 from datetime import timedelta
-from datetime import date
+from datetime import date as dt
 
 
 #print (finviz.get_stock('AMD'))
@@ -183,7 +182,7 @@ class Trader(object):
 		# 2. 確認delta_d天後的漲跌幅是否<delta_p
 		# 3. update
 
-		delta_d = self.get_date_diff(strike_date, date.today().strftime("%Y-%m-%d"))
+		delta_d = self.get_date_diff(strike_date, dt.today().strftime("%Y-%m-%d"))
 		print ('strike_date: {}	do_tech_idx_dict: {}'.format(strike_date, do_tech_idx_dict.keys()))
 		if delta_d > 60:
 			return
@@ -219,7 +218,7 @@ class Trader(object):
 			bechmark_dict[key] = row_lasted[key].values
 		return bechmark_dict, keys_all
 
-	def back_testing(self, tech_idx_path, options_contract_file_path):
+	def back_testing(self, tech_idx_path, options_contract_file_path, combin_contract_list_all):
 		# 1. 找contract的履約價跟我們close的價差delta_p，去歷史看在到履約日期內的時間長度delta_d，
 		#		有幾次會下跌or上漲delta_p的機率
 		# 2. 再考慮各種技術指標的組合情況
@@ -282,8 +281,9 @@ class Trader(object):
 		#print (sell_contracts_list)
 		PCS_combin_contract_list = []
 		CCS_combin_contract_list = []
-
+		#print (sell_contracts_list, buy_contracts_list)
 		# PCS=SP+BP, the strike of SP need to > BP
+		combine_contract_delta_value = 2
 		if contract_type == 'put':
 			for sell_contracts_dict in sell_contracts_list:
 				for buy_contracts_dict in buy_contracts_list:
@@ -304,16 +304,18 @@ class Trader(object):
 					#print (sell_contracts_dict['strike'] < buy_contracts_dict['strike'], sell_contracts_dict['strike'], buy_contracts_dict['strike'])
 					sell_strike = float(sell_contracts_dict['strike'])
 					buy_strike = float(buy_contracts_dict['strike'])
-					
+
 					combin_contract_dict['return_on_invest'] = (sell_bid - buy_ask) / (sell_strike+0.00000001)
-					combin_contract_dict['risk_max'] = buy_strike - sell_strike + sell_bid - buy_ask
+					combin_contract_dict['risk_max'] = (buy_strike - sell_strike + sell_bid - buy_ask) / (sell_strike+0.00000001)
 					#print (sell_bid, buy_ask, sell_strike, combin_contract_dict['return_on_invest'])
 					#print (str(combin_contract_dict['return_on_invest'])=='nan', str(combin_contract_dict['risk_max'])=='nan')
 					if str(combin_contract_dict['return_on_invest'])=='nan' or \
 						str(combin_contract_dict['risk_max'])=='nan' or \
 						combin_contract_dict['return_on_invest'] < self.PCS_return_on_invest:
 						continue
-					#print (combin_contract_dict)
+					#min_value_delta = (sell_strike - buy_strike) if (sell_strike - buy_strike) < min_value_delta else min_value_delta
+					if combine_contract_delta_value < (sell_strike - buy_strike):
+						continue
 					combin_contract_dict['sell_contractSymbol'] = copy.deepcopy(sell_contracts_dict['contractSymbol'][0])
 					combin_contract_dict['buy_contractSymbol'] = copy.deepcopy(buy_contracts_dict['contractSymbol'][0])
 					combin_contract_dict['string'] = sell_contracts_dict['put_string']
@@ -342,14 +344,16 @@ class Trader(object):
 
 					sell_strike = float(sell_contracts_dict['strike'])
 					buy_strike = float(buy_contracts_dict['strike'])
-					
+
 					combin_contract_dict['return_on_invest'] = (sell_bid - buy_ask) / (sell_strike+0.00000001)
-					combin_contract_dict['risk_max'] = buy_strike - sell_strike + sell_bid - buy_ask
+					combin_contract_dict['risk_max'] = (buy_strike - sell_strike + sell_bid - buy_ask) / (sell_strike+0.00000001)
 					if str(combin_contract_dict['return_on_invest'])=='nan' or \
 						str(combin_contract_dict['risk_max'])=='nan' or \
 						combin_contract_dict['return_on_invest'] < self.CCS_return_on_invest:
 						continue
-					#print (combin_contract_dict)
+					#min_value_delta = (buy_strike - sell_strike) if (buy_strike - sell_strike) < min_value_delta else min_value_delta
+					if combine_contract_delta_value < (buy_strike - sell_strike):
+						continue
 					combin_contract_dict['sell_contractSymbol'] = copy.deepcopy(sell_contracts_dict['contractSymbol'][0])
 					combin_contract_dict['buy_contractSymbol'] = copy.deepcopy(buy_contracts_dict['contractSymbol'][0])
 					combin_contract_dict['string'] = sell_contracts_dict['call_string']
@@ -417,14 +421,13 @@ class Trader(object):
 							round(result_all['moving_average'][lasted_date]['D'], 3)])
 #							'''
 
-		return
-
-		#print (options_file_path)
+		print (options_file_path)
 		df = pd.read_csv(options_file_path)
 		df_shape = df.shape
 		type_last = ''
 		date_last = ''
 		contracts_list = []
+		combin_contract_list_all = []
 		contract_dict = {'contractSymbol': -1, \
 							'bid': -1, \
 							'ask': -1, \
@@ -435,6 +438,7 @@ class Trader(object):
 		for num in range(df_shape[0]):
 			row = df[:][num:num+1]
 			contract_dict['contractSymbol'] = row['contractSymbol'].values
+			contract_dict['date'] = row['date'].values
 			contract_dict['bid'] = row['bid'].values
 			contract_dict['ask'] = row['ask'].values
 			contract_dict['strike'] = row['strike'].values
@@ -443,19 +447,27 @@ class Trader(object):
 			contract_dict['lasted_close'] = lasted_close
 			contract_dict = copy.deepcopy(contract_dict)
 			contracts_list.append(contract_dict)
-
+			delta_d = self.get_date_diff(row['date'].values, dt.today().strftime("%Y-%m-%d"))
+			#print (row['date'].values, delta_d, delta_d>300, type(delta_d))
+			if delta_d > 300:
+				continue
 
 			if (row['type'].values != type_last or row['date'].values != date_last):
 				#del contracts_list[-1]
 				combin_contract_list = self.get_best_combination_contract(contracts_list[:-2], contracts_list[:-2], type_last)
+				combin_contract_list_all.extend(combin_contract_list)
+				#print (combin_contract_list, type_last)
 				#print (combin_contract_list)#, row['type'].values, row['date'].values)
-				if not combin_contract_list== []:
-					assert False
+				#if not combin_contract_list== []:
+				#	assert False
 				contracts_list = []
 				contracts_list.append(contract_dict)
 
 			type_last = row['type'].values
 			date_last = row['date'].values
+
+		return combin_contract_list_all
+
 
 		'''
 		with open(options_com_order_csv_path, 'w', newline='') as csvfile:
@@ -2113,10 +2125,10 @@ def main_back_testing():
 	options_com_order_csv_path = '{}.csv'.format(os.path.join(t.option_com_order_folder_path, stock_name))
 
 
-	t.output_report(stock_name, options_file_path, options_com_order_csv_path, result_all)
+	combin_contract_list_all = t.output_report(stock_name, options_file_path, options_com_order_csv_path, result_all)
 
 	#t.output_report(stock_name, options_contract_file_path, result_all)
-	t.back_testing(tech_idx_path, options_contract_file_path)
+	t.back_testing(tech_idx_path, options_contract_file_path, combin_contract_list_all)
 
 if __name__ == '__main__':
 	#main()

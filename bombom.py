@@ -183,7 +183,7 @@ class Trader(object):
 		# 3. update
 
 		delta_d = self.get_date_diff(strike_date, dt.today().strftime("%Y-%m-%d"))
-		print ('strike_date: {}	do_tech_idx_dict: {}'.format(strike_date, do_tech_idx_dict.keys()))
+		#print ('strike_date: {}	do_tech_idx_dict: {}'.format(strike_date, do_tech_idx_dict.keys()))
 		#if delta_d > 60:
 		#	return
 		delta_p = strike_price - close # future - now
@@ -262,6 +262,7 @@ class Trader(object):
 
 		for combin_contract_list in combin_contract_list_all:
 			for combin_contract in combin_contract_list:
+				print (combin_contract['sell_contractSymbol'], combin_contract['buy_contractSymbol'])
 				close_value = combin_contract['lasted_close']
 				typ = combin_contract['contract_type'][0]
 				# sell part
@@ -282,7 +283,7 @@ class Trader(object):
 					do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
 					probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
 					win_probability_dict_sell[keys_all] = copy.deepcopy(probability_reuslt_dict['unhit'] / probability_reuslt_dict['all'])
-				print (win_probability_dict_sell)
+				#print (win_probability_dict_sell)
 
 				# buy part
 				strike_price = combin_contract['buy_strike_price']

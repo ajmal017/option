@@ -124,6 +124,7 @@ class Trader(object):
 		self.PCS_return_on_invest = 0.03
 		self.CCS_return_on_invest = 0.03
 		self.min_days = 300 * 6
+		self.interval_value_point = 3
 
 	def bset_contract(self, stock_name):
 		period_days = 5
@@ -527,24 +528,24 @@ class Trader(object):
 		#	for interval_dict in result_all['supported_point']:
 		#		if interval_dict['topk_volume'] < 0.5:
 		#			break
-		#		point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], 2), round(1-(float(interval_dict['Interval'].split('_')[1])/lasted_close), 2))
+		#		point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], self.interval_value_point), round(1-(float(interval_dict['Interval'].split('_')[1])/lasted_close), self.interval_value_point))
 		#else:
 		#	for interval_dict in result_all['pressed_point']:
 		#		if interval_dict['topk_volume'] < 0.5:
 		#			break
-		#		point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], 2), round(1-(float(interval_dict['Interval'].split('_')[0])/lasted_close), 2))
+		#		point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], self.interval_value_point), round(1-(float(interval_dict['Interval'].split('_')[0])/lasted_close), self.interval_value_point))
 
 		# SP:	1-(point/close)越大，closing跟point越遠
 		for interval_dict in result_all['supported_point']:
 			if interval_dict['topk_volume'] < self.supported_point_rate_thre:
 				break
-			cow_point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], 2), round(1-(float(interval_dict['Interval'].split('_')[1])/lasted_close), 2))
+			cow_point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], self.interval_value_point), round(1-(float(interval_dict['Interval'].split('_')[1])/lasted_close), self.interval_value_point))
 		
 		# BP:	1-(point/close)越小，closing跟point越遠
 		for interval_dict in result_all['pressed_point']:
 			if interval_dict['topk_volume'] < self.pressed_point_rate_thre:
 				break
-			bear_point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], 2), round(1-(float(interval_dict['Interval'].split('_')[0])/lasted_close), 2))
+			bear_point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], self.interval_value_point), round(1-(float(interval_dict['Interval'].split('_')[0])/lasted_close), self.interval_value_point))
 
 #		'''
 		with open(options_file_path, 'w', newline='') as csvfile:
@@ -570,7 +571,7 @@ class Trader(object):
 						#opt = opts_dict[key][idx]
 						writer.writerow([typ, date, opts_dict['contractSymbol'][idx], \
 							opts_dict['strike'][idx], opts_dict['bid'][idx], opts_dict['ask'][idx], \
-							round(opts_dict['bid'][idx]/opts_dict['strike'][idx], 3), opts_dict['volume'][idx], \
+							round(opts_dict['bid'][idx]/opts_dict['strike'][idx], self.interval_value_point), opts_dict['volume'][idx], \
 							lasted_close, point_string, \
 							opts_dict['change'][idx], result_all['moving_average'][lasted_date]['MA5'], \
 							result_all['moving_average'][lasted_date]['MA20'], \
@@ -579,8 +580,8 @@ class Trader(object):
 							'{}_{}'.format(result_all['MA_state_dict']['MA40_state'], result_all['MA_state_dict']['MA40_state_keep']), \
 							'{}_{}'.format(result_all['MA_state_dict']['MA80_state'], result_all['MA_state_dict']['MA80_state_keep']), \
 							lasted_situation_type, \
-							round(result_all['moving_average'][lasted_date]['K'], 3), \
-							round(result_all['moving_average'][lasted_date]['D'], 3)])
+							round(result_all['moving_average'][lasted_date]['K'], self.interval_value_point), \
+							round(result_all['moving_average'][lasted_date]['D'], self.interval_value_point)])
 #							'''
 
 		#print (options_file_path)
@@ -852,7 +853,7 @@ class Trader(object):
 		stock_dict = {}
 		press_list = []
 		count = 0
-		interval_value_point = 2
+		interval_value_point = self.interval_value_point
 		sup_pnt_dict_final_all = {}
 		Open_last, High_last, Low_last, Close_last, Volume_last = 0, 0, 0, 0, 0
 		stock_close_list_temp = []
@@ -934,7 +935,7 @@ class Trader(object):
 		first_date = (list(stock_tech_idx_dict.keys())[0])
 		first_date_num = self.get_date_num(first_date)
 
-		interval_value_point = 2
+		interval_value_point = self.interval_value_point
 		press_pnt_dict_final_all = {}
 		Open_last, High_last, Low_last, Close_last, Volume_last = 0, 0, 0, 0, 0
 		stock_close_list_temp = []
@@ -1358,7 +1359,7 @@ class Trader(object):
 		stock_date_list = []
 		stock_volume_list = []
 		count = 0
-		interval_value_point = 2
+		interval_value_point = 3
 		Open_last, High_last, Low_last, Close_last, Volume_last = 0, 0, 0, 0, 0
 		with open(file_path, 'r') as file_read:
 			for line in file_read.readlines():
@@ -1386,6 +1387,7 @@ class Trader(object):
 				stock_date_list.append(Date)
 				Open_last, High_last, Low_last, Close_last, Volume_last = Open, High, Low, Close, Volume
 		self.interval_value = round(max(stock_close_list) / self.part_num, interval_value_point)
+		print (self.interval_value, max(stock_close_list), self.part_num)
 		#print (stock_dict)
 		#print (stock_name, 'get_supporting_point')
 		topk_volume_list = [0]*self.part_num
@@ -1473,6 +1475,7 @@ class Trader(object):
 
 				for press_dict_tmp in press_list:
 					num = int(press_dict_tmp['Close'] / self.interval_value)
+					print (press_all_dict)
 					press_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] \
 						+=press_dict_tmp['Volume_Value']
 				# normalize press_all_dict
@@ -1843,6 +1846,7 @@ class Trader(object):
 				continue
 
 			result_all = self.get_supporting_point(stock_name, sav_stock_csv_path)
+			continue
 			#self.output_report(stock_name, sav_option_csv_path, sav_option_com_order_csv_path, result_all)
 			#print (sav_stock_csv_path, sav_option_csv_path, sav_option_com_order_csv_path)
 			tech_idx_path = 'techidx/{}.csv'.format(stock_name)
@@ -1851,7 +1855,8 @@ class Trader(object):
 			options_file_path = '{}.csv'.format(os.path.join(self.option_folder_path, stock_name))
 			options_com_order_csv_path = '{}.csv'.format(os.path.join(self.option_com_order_folder_path, stock_name))
 			combin_contract_list_all, state_flag = self.output_report(stock_name, options_file_path, options_com_order_csv_path, result_all)
-			if state_flag:
+			if not state_flag:
+				#print ('continue')
 				continue
 			self.bset_contract(stock_name)
 			best_combin_contract_all = self.back_testing(tech_idx_path, options_contract_file_path, combin_contract_list_all)
@@ -1920,11 +1925,11 @@ class Boss(object):
 			self.workers.append(trader)
 
 	def assign_task(self):
-		for i in range(self.num_worker):
-			p = Process(target=self.workers[i].analysis_document, args=(i, self.stock_queues,))
-			p.start()
-			p.join(timeout=0.1)
-		#self.workers[0].analysis_document(0, self.stock_queues)
+		#for i in range(self.num_worker):
+		#	p = Process(target=self.workers[i].analysis_document, args=(i, self.stock_queues,))
+		#	p.start()
+		#	p.join(timeout=0.1)
+		self.workers[0].analysis_document(0, self.stock_queues)
 
 		print ('assign task finish!')
 
@@ -2203,10 +2208,13 @@ def main_test():
 	difference_rate = 0.1
 	stock_folder_path = 'stocks'
 	roe_ttm = 1
-	t = Trader(period_days, difference_rate, stock_folder_path, roe_ttm)
+	stock_name = 'APWC'#''
+	option_folder_path = 'pickle_result/{}.csv'.format(stock_name)
+	# period_days, difference_rate, stock_folder_path, option_folder_path, roe_ttm)
+	t = Trader(period_days, difference_rate, stock_folder_path, option_folder_path, roe_ttm)
 	#stock_name = '2330.TW'#'ACGL'
 	while True:
-		stock_name = 'AMD'#''
+		
 		file_path = 'stocks/{}.csv'.format(stock_name)
 		options_file_path = 'options/{}.csv'.format(stock_name)
 		#print (len(t.crawl_price(stock_name)))
@@ -2328,8 +2336,8 @@ def main_back_testing():
 	'''
 
 if __name__ == '__main__':
-	main()
+	#main()
 	#main_update_lookuptable()
 	#main_best_contract()
-	#main_test()
+	main_test()
 	#main_back_testing()

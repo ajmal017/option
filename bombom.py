@@ -1387,7 +1387,7 @@ class Trader(object):
 				stock_date_list.append(Date)
 				Open_last, High_last, Low_last, Close_last, Volume_last = Open, High, Low, Close, Volume
 		self.interval_value = round(max(stock_close_list) / self.part_num, interval_value_point)
-		print (self.interval_value, max(stock_close_list), self.part_num)
+		#print (self.interval_value, max(stock_close_list), self.part_num)
 		#print (stock_dict)
 		#print (stock_name, 'get_supporting_point')
 		topk_volume_list = [0]*self.part_num
@@ -1475,7 +1475,7 @@ class Trader(object):
 
 				for press_dict_tmp in press_list:
 					num = int(press_dict_tmp['Close'] / self.interval_value)
-					print (press_all_dict)
+					#print (press_all_dict)
 					press_all_dict['{}_{}'.format(round(self.interval_value*num, interval_value_point), round(self.interval_value*(num+1), interval_value_point))] \
 						+=press_dict_tmp['Volume_Value']
 				# normalize press_all_dict
@@ -2336,8 +2336,8 @@ def main_back_testing():
 	'''
 
 if __name__ == '__main__':
-	#main()
+	main()
 	#main_update_lookuptable()
 	#main_best_contract()
-	main_test()
+	#main_test()
 	#main_back_testing()

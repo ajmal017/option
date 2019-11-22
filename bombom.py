@@ -230,13 +230,15 @@ class Trader(object):
 
 			else: # Close,MA,MACD,D,RSI,Supported_point,Pressed_point
 				try:
+					#print (tech_idx, int(do_tech_idx_dict[tech_idx]), int(today_tech_idx[tech_idx].values))
 					if not (int(do_tech_idx_dict[tech_idx]) == int(today_tech_idx[tech_idx].values)):
 						return False
 				except:
 					print ('2-1: ', do_tech_idx_dict)
 					print ('2-2: ', today_tech_idx)
 					print ('2-3: ', int(do_tech_idx_dict[tech_idx]))
-					print ('2-4: ', int(today_tech_idx[tech_idx].values))
+					print ('2-4: ', today_tech_idx[tech_idx])
+					print ('2-5: ', int(today_tech_idx[tech_idx].values))
 					assert False
 		return True
 
@@ -270,7 +272,10 @@ class Trader(object):
 		df = pd.read_csv(tech_idx_path)
 		df_shape = df.shape
 		reuslt_dict = {'all': 0, 'unhit': 0}
+		if delta_d < 0:
+			return reuslt_dict
 		for num_of_date in range(1, df_shape[0]-delta_d):
+			#print ('num_of_date: ', num_of_date, ' df_shape[0]: ', df_shape[0], ' delta_d: ', delta_d)
 			row = df[:][num_of_date:num_of_date+1] # Close,MA,MACD,D,RSI,Supported_point,Pressed_point
 			#print ('row: ', row, ' num_of_date: ', num_of_date, ' df_shape: ', df_shape, ' delta_d: ', delta_d)
 			if not self.check_vaild_sample(do_tech_idx_dict, row, strike_price):
@@ -343,6 +348,7 @@ class Trader(object):
 		# 技術指標全部都看，然後勝率最高的
 		best_combin_contract_all = {}
 		for combin_contract_list in combin_contract_list_all:
+			#print (combin_contract_list)
 			best_combin_contract = {'sell_contractSymbol': -1, \
 									'buy_contractSymbol': -1, \
 									'except_value': 0, \
@@ -548,6 +554,8 @@ class Trader(object):
 			bear_point_string+='{}/{}/{}  '.format(interval_dict['Interval'], round(interval_dict['topk_volume'], self.interval_value_point), round(1-(float(interval_dict['Interval'].split('_')[0])/lasted_close), self.interval_value_point))
 
 #		'''
+		#print (options_file_path)
+		#assert False
 		with open(options_file_path, 'w', newline='') as csvfile:
 			writer = csv.writer(csvfile)
 			writer.writerow(['type', 'date', 'contractSymbol', 'strike', 'bid', \
@@ -1846,7 +1854,7 @@ class Trader(object):
 				continue
 
 			result_all = self.get_supporting_point(stock_name, sav_stock_csv_path)
-			continue
+			#continue
 			#self.output_report(stock_name, sav_option_csv_path, sav_option_com_order_csv_path, result_all)
 			#print (sav_stock_csv_path, sav_option_csv_path, sav_option_com_order_csv_path)
 			tech_idx_path = 'techidx/{}.csv'.format(stock_name)
@@ -1925,11 +1933,11 @@ class Boss(object):
 			self.workers.append(trader)
 
 	def assign_task(self):
-		#for i in range(self.num_worker):
-		#	p = Process(target=self.workers[i].analysis_document, args=(i, self.stock_queues,))
-		#	p.start()
-		#	p.join(timeout=0.1)
-		self.workers[0].analysis_document(0, self.stock_queues)
+		for i in range(self.num_worker):
+			p = Process(target=self.workers[i].analysis_document, args=(i, self.stock_queues,))
+			p.start()
+			p.join(timeout=0.1)
+		#self.workers[0].analysis_document(0, self.stock_queues)
 
 		print ('assign task finish!')
 
@@ -1940,10 +1948,12 @@ def get_args():
 	return parser.parse_args()
 
 def main():
-#	get_stock_name_list()
+	#print (len(get_stock_name_list()))
+	#assert False
 	param = get_args()
 #	boss = Boss(['{}'.format(stock_name[:-4]) for stock_name in os.listdir('/Users/Wiz/Desktop/option/stocks_old') if not '.' in stock_name[:-4]])
 #	boss = Boss(['{}'.format(stock_name[:-4]) for stock_name in os.listdir('stocks') if not '.' in stock_name[:-4]])
+	#boss = Boss(['AAL'])
 	boss = Boss(get_stock_name_list())
 	boss.load_config(param.config_path)
 	boss.hire_worker()

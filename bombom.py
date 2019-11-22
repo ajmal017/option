@@ -123,6 +123,7 @@ class Trader(object):
 		self.pressed_point_rate_thre = 0.5
 		self.PCS_return_on_invest = 0.03
 		self.CCS_return_on_invest = 0.03
+		self.min_days = 300 * 6
 
 	def bset_contract(self, stock_name):
 		period_days = 5
@@ -552,7 +553,14 @@ class Trader(object):
 				'ask', 'bid/strike', 'vol', 'lasted_closing', 'interval / topk% / 1-(point/close)', \
 				'change', 'MA5', 'MA20', 'MA40', 'MA80', 'MA40_state(keep)', \
 				'MA80_state(keep)', 'situation_type', 'k', 'd'])
-			stock_ticker = yf.Ticker(stock_name)
+			
+			try:
+				stock_ticker = yf.Ticker(stock_name)
+				tmp = stock_ticker.options
+			except:
+				print ('fail in {}'.format(stock_name))
+				return {}, False
+
 			for date in stock_ticker.options:
 				for index, opts in enumerate(stock_ticker.option_chain(date)):
 					typ = 'call' if index == 0 else 'put'
@@ -575,7 +583,7 @@ class Trader(object):
 							round(result_all['moving_average'][lasted_date]['D'], 3)])
 #							'''
 
-		print (options_file_path)
+		#print (options_file_path)
 		df = pd.read_csv(options_file_path)
 		df_shape = df.shape
 		type_last = ''
@@ -620,7 +628,7 @@ class Trader(object):
 			type_last = row['type'].values
 			date_last = row['date'].values
 
-		return combin_contract_list_all
+		return combin_contract_list_all, True
 
 
 		'''
@@ -738,7 +746,7 @@ class Trader(object):
 			if first_flag:
 				value_max = sup_pnt_dict_final[sup_dict_key]
 				first_flag = False
-			if (sup_pnt_dict_final[sup_dict_key] / value_max) > valid_percentage_pnt_threthod:
+			if (sup_pnt_dict_final[sup_dict_key] / (value_max+0.0001)) > valid_percentage_pnt_threthod:
 				d[round(sup_dict_key*close_interval, interval_value_point)] = round(sup_pnt_dict_final[sup_dict_key] / value_max, 2)
 			#d[round(sup_dict_key*close_interval, interval_value_point)] = sup_pnt_dict_final[sup_dict_key]
 		return d
@@ -1100,17 +1108,21 @@ class Trader(object):
 			summary={}
 			MA_temp1={}
 			MA_temp3={}
+			lasted_close = 0
 			for i in range (0,Loop_T):
 				MA_temp2={}
 				Date=price_history[strat_row].replace('\n','').split(',')[0]
-				try: 
-					Close=price_history[strat_row].replace('\n','').split(',')[5]
-				except: # close=nan
-					Close=price_history[strat_row-1].replace('\n','').split(',')[5]
+				
+				Close=price_history[strat_row].replace('\n','').split(',')[5]
+				if Close == 'null':
+					Close = lasted_close
 				MA_temp2['Close']=Close
 				MA_temp2['Date']=Date
 				# ========================MA5========================
-				MA5 = float(MA5) + float(Close)
+				try:
+				    MA5 = float(MA5) + float(Close)
+				except:
+					print (Date, MA5, Close, CSV)
 				MA_temp2['MA5']=0
 				MA_temp1[i]=MA_temp2
 				if i>= 4:
@@ -1188,7 +1200,7 @@ class Trader(object):
 				summary[Date]=sum_temp
 				#MA_temp3[Date] = copy.deepcopy(MA_temp2)
 				stock_tech_idx_dict[Date]['MA'] = copy.deepcopy(MA_temp2['MA_sum'])
-
+				lasted_close = Close
 			#return summary
 		return stock_tech_idx_dict
 
@@ -1234,7 +1246,7 @@ class Trader(object):
 			if len(tmp_up_price_list) == n and len(tmp_down_price_list) == n:
 				mv_down_price = sum(tmp_down_price_list) / n
 				mv_up_price = sum(tmp_up_price_list) / n
-				RSI = (100 * mv_up_price) / (mv_up_price + mv_down_price)
+				RSI = (100 * mv_up_price) / (mv_up_price + mv_down_price + 0.001)
 				stock_tech_idx_dict[date]['RSI'] = RSI // (100/nBin)
 				tmp_up_price_list.pop(0)
 				tmp_down_price_list.pop(0)
@@ -1264,13 +1276,17 @@ class Trader(object):
 			MACD_temp1={}
 			MACD_temp3={}
 			# j=strat_row
+			lasted_close = 0
 			for i in range (0,Loop_T):
 				MACD_temp2={}
 				Date=price_history[strat_row].replace('\n','').split(',')[0]
-				try: 
-					Close=price_history[strat_row].replace('\n','').split(',')[5]
-				except: # close=nan
-					Close=price_history[strat_row-1].replace('\n','').split(',')[5]
+				#try: 
+				#	Close=price_history[strat_row].replace('\n','').split(',')[5]
+				#except: # close=nan
+				#	Close=price_history[strat_row-1].replace('\n','').split(',')[5]
+				Close=price_history[strat_row].replace('\n','').split(',')[5]
+				if Close == 'null':
+					Close = lasted_close
 				MACD_temp2['Close']=Close
 				MACD_temp2['Date']=Date
 
@@ -1326,7 +1342,7 @@ class Trader(object):
 					summary[Date]=MACD_temp1[i]['Range']
 					stock_tech_idx_dict[Date]['MACD'] = copy.deepcopy(MACD_temp1[i]['Range'])
 				strat_row=strat_row+1
-
+				lasted_close = Close
 			return stock_tech_idx_dict
 
 	def get_supporting_point(self, stock_name, file_path):
@@ -1626,6 +1642,7 @@ class Trader(object):
 				for idx in range(len(stock_close_list)-1, len(stock_close_list)-self.ma_days, -1):
 					#print (len(stock_close_list)-1, len(stock_close_list)-self.ma_days, -1)
 					#print (idx)
+					#print (len(stock_close_list), idx, len(stock_close_list)-self.ma_days, self.ma_days)
 					close = stock_close_list[idx]
 					# 1 2 3 4 5 6 7 8 len=8 [3:8]->[idx-ma+1:idx+1]
 					MA5 = round(sum(stock_close_list[idx-5+1:idx+1]) / 5.0, 2)
@@ -1810,23 +1827,32 @@ class Trader(object):
 		calculating the supporting point and stress point
 		"""
 		while not stock_queues.empty():
+			fail_flag = False
 			stock_name = stock_queues.get()
-#			if not self.analysis_statement(stock_name):
-#				continue
+			#if not self.analysis_statement(stock_name):
+			#	continue
 
 			sav_stock_csv_path = '{}.csv'.format(os.path.join(self.stock_folder_path, stock_name))
 			sav_option_csv_path = '{}.csv'.format(os.path.join(self.option_folder_path, stock_name))
 			sav_option_com_order_csv_path = '{}.csv'.format(os.path.join(self.option_com_order_folder_path, stock_name))
+			if not os.path.exists(self.option_folder_path):
+				os.mkdir(self.option_folder_path)
+
+			df = self.crawl_price(stock_name)
+			if len(df) < self.min_days:
+				continue
 
 			result_all = self.get_supporting_point(stock_name, sav_stock_csv_path)
 			#self.output_report(stock_name, sav_option_csv_path, sav_option_com_order_csv_path, result_all)
-
+			#print (sav_stock_csv_path, sav_option_csv_path, sav_option_com_order_csv_path)
 			tech_idx_path = 'techidx/{}.csv'.format(stock_name)
 			options_contract_file_path = 'options/{}.csv'.format(stock_name)
 			sav_stock_csv_path = '{}.csv'.format(os.path.join(self.stock_folder_path, stock_name))
 			options_file_path = '{}.csv'.format(os.path.join(self.option_folder_path, stock_name))
 			options_com_order_csv_path = '{}.csv'.format(os.path.join(self.option_com_order_folder_path, stock_name))
-			combin_contract_list_all = self.output_report(stock_name, options_file_path, options_com_order_csv_path, result_all)
+			combin_contract_list_all, state_flag = self.output_report(stock_name, options_file_path, options_com_order_csv_path, result_all)
+			if state_flag:
+				continue
 			self.bset_contract(stock_name)
 			best_combin_contract_all = self.back_testing(tech_idx_path, options_contract_file_path, combin_contract_list_all)
 			print (best_combin_contract_all)
@@ -1894,11 +1920,11 @@ class Boss(object):
 			self.workers.append(trader)
 
 	def assign_task(self):
-		#for i in range(self.num_worker):
-		#	p = Process(target=self.workers[i].analysis_document, args=(i, self.stock_queues,))
-		#	p.start()
-		#	p.join(timeout=0.1)
-		self.workers[0].analysis_document(0, self.stock_queues)
+		for i in range(self.num_worker):
+			p = Process(target=self.workers[i].analysis_document, args=(i, self.stock_queues,))
+			p.start()
+			p.join(timeout=0.1)
+		#self.workers[0].analysis_document(0, self.stock_queues)
 
 		print ('assign task finish!')
 
@@ -1912,8 +1938,8 @@ def main():
 #	get_stock_name_list()
 	param = get_args()
 #	boss = Boss(['{}'.format(stock_name[:-4]) for stock_name in os.listdir('/Users/Wiz/Desktop/option/stocks_old') if not '.' in stock_name[:-4]])
-	boss = Boss(['{}'.format(stock_name[:-4]) for stock_name in os.listdir('/Users/Wiz/Desktop/option/stocks') if not '.' in stock_name[:-4]])
-	#boss = Boss(get_stock_name_list())
+#	boss = Boss(['{}'.format(stock_name[:-4]) for stock_name in os.listdir('stocks') if not '.' in stock_name[:-4]])
+	boss = Boss(get_stock_name_list())
 	boss.load_config(param.config_path)
 	boss.hire_worker()
 	boss.assign_task()

@@ -180,7 +180,7 @@ class Trader(object):
 
 
 		delta_d = self.get_date_diff(strike_date, dt.today().strftime("%Y-%m-%d"))
-		delta_p = strike_price - close # future - now
+		#delta_p = strike_price / close # strike_price / close
 		df = pd.read_csv(tech_idx_path)
 		df_shape = df.shape
 		reuslt_dict = {'all': 0, 'unhit': 0}
@@ -192,11 +192,13 @@ class Trader(object):
 			if typ == 'put':
 				# 歷史資料future - now > 該合約
 				# 歷史資料中第n+30天的close(27) - 歷史資料中第n天的close(28) > strike_price(25) - now_close(28)
-				if row['Close'].values - row_future['Close'].values < close - strike_price:
+				if row_future['Close'].values / row['Close'].values > strike_price / close:
 					reuslt_dict['unhit']+=1
+#				if row['Close'].values - row_future['Close'].values < close - strike_price:
+#					reuslt_dict['unhit']+=1
 			elif typ == 'call':
 				# 歷史資料future - now < 該合約
-				if row_future['Close'].values - row['Close'].values < strike_price - close:
+				if row_future['Close'].values / row['Close'].values < strike_price / close:
 					reuslt_dict['unhit']+=1
 			else:
 				assert False, 'wrong with contract type in do_back_testing'
@@ -250,7 +252,7 @@ class Trader(object):
 		diff = datetime.datetime.strptime(date1, datetimeFormat) - datetime.datetime.strptime(date2, datetimeFormat)
 		return diff.days
 
-	def do_back_testing(self, tech_idx_path, close, strike_price, strike_date, do_tech_idx_dict, typ):
+	def do_back_testing(self, tech_idx_path, close, sell_strike_price, buy_strike_price, strike_date, do_tech_idx_dict, typ):
 		# Input:
 		#		tech_idx_path: the path of tech index csv file
 		#		delta_d: the time length of tody ~ strike date -> 幾天後
@@ -268,28 +270,45 @@ class Trader(object):
 		#print ('strike_date: {}	do_tech_idx_dict: {}'.format(strike_date, do_tech_idx_dict.keys()))
 		#if delta_d > 60:
 		#	return
-		delta_p = strike_price - close # future - now
+		#delta_p = strike_price - close # future - now
 		df = pd.read_csv(tech_idx_path)
 		df_shape = df.shape
-		reuslt_dict = {'all': 0, 'unhit': 0}
+#		reuslt_dict = {'all': 0, 'unhit': 0}
+		reuslt_dict = {'all': 0, 'p1': 0, 'p2': 0, 'p3': 0}
 		if delta_d < 0:
 			return reuslt_dict
 		for num_of_date in range(1, df_shape[0]-delta_d):
 			#print ('num_of_date: ', num_of_date, ' df_shape[0]: ', df_shape[0], ' delta_d: ', delta_d)
 			row = df[:][num_of_date:num_of_date+1] # Close,MA,MACD,D,RSI,Supported_point,Pressed_point
 			#print ('row: ', row, ' num_of_date: ', num_of_date, ' df_shape: ', df_shape, ' delta_d: ', delta_d)
-			if not self.check_vaild_sample(do_tech_idx_dict, row, strike_price):
+			if not self.check_vaild_sample(do_tech_idx_dict, row, sell_strike_price):
 				continue
 			reuslt_dict['all']+=1
 			row_future = df[:][num_of_date+delta_d:num_of_date+delta_d+1]
 			if typ == 'put':
-				# 歷史資料future - now > 該合約
-				if row['Close'].values - row_future['Close'].values < close - strike_price:
-					reuslt_dict['unhit']+=1
+#				if row_future['Close'].values / row['Close'].values > strike_price / close:
+#					reuslt_dict['unhit']+=1
+				if row_future['Close'].values / row['Close'].values > sell_strike_price / close:
+					reuslt_dict['p1']+=1
+				elif sell_strike_price / close >= row_future['Close'].values / row['Close'].values >= buy_strike_price / close:
+					reuslt_dict['p2']+=1
+				elif row_future['Close'].values / row['Close'].values < buy_strike_price / close:
+					reuslt_dict['p3']+=1
+				else:
+					assert False, 'wrong with do_back_testing range, in {}'.format(typ)
+
 			elif typ == 'call':
 				# 歷史資料future - now < 該合約
-				if row_future['Close'].values - row['Close'].values < strike_price - close:
-					reuslt_dict['unhit']+=1
+#				if row_future['Close'].values / row['Close'].values < strike_price / close:
+#					reuslt_dict['unhit']+=1
+				if row_future['Close'].values / row['Close'].values < sell_strike_price / close:
+					reuslt_dict['p1']+=1
+				elif sell_strike_price / close <= row_future['Close'].values / row['Close'].values <= buy_strike_price / close:
+					reuslt_dict['p2']+=1
+				elif row_future['Close'].values / row['Close'].values > buy_strike_price / close:
+					reuslt_dict['p3']+=1
+				else:
+					assert False, 'wrong with do_back_testing range, in {}'.format(typ)
 			else:
 				assert False, 'wrong with contract type in do_back_testing'
 		#if reuslt_dict['all'] == 0:
@@ -321,7 +340,7 @@ class Trader(object):
 
 
 
-		keys_list = ['MA-MACD-D-RSI']#['MA-MACD-D-RSI', 'MA-MACD-D', 'MA-MACD-RSI', 'MA-MACD', \
+		keys_list = ['MACD-D']#['MA-MACD-D-RSI', 'MA-MACD-D', 'MA-MACD-RSI', 'MA-MACD', \
 					#'MA-D-RSI', 'MA-D', 'MA-RSI', 'MA', \
 					#'MACD-D-RSI', 'MACD-D', 'MACD-RSI', 'MACD', \
 					#'D-RSI', 'D', 'RSI', '']
@@ -358,7 +377,8 @@ class Trader(object):
 				close_value = combin_contract['lasted_close']
 				typ = combin_contract['contract_type'][0]
 				# sell part
-				strike_price = combin_contract['sell_strike_price']
+				sell_strike_price = combin_contract['sell_strike_price']
+				buy_strike_price = combin_contract['buy_strike_price']
 				strike_date = combin_contract['sell_strike_date']
 				for keys in keys_list:
 					if typ == 'put':
@@ -368,13 +388,13 @@ class Trader(object):
 					else:
 						assert False, 'wrong with contract type: {}'.format(typ)
 					do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
-					probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
-					win_probability_dict_sell[keys_all] = copy.deepcopy(probability_reuslt_dict['unhit'] / (probability_reuslt_dict['all']+0.000001))
+					probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, sell_strike_price, buy_strike_price, strike_date, do_tech_idx_dict, typ)
+					probability_reuslt_dict_all[keys_all] = copy.deepcopy(probability_reuslt_dict)
 
 				for keys_all in keys_list[:-1]:
 					do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
-					probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
-					win_probability_dict_sell[keys_all] = copy.deepcopy(probability_reuslt_dict['unhit'] / (probability_reuslt_dict['all']+0.000001))
+					probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, sell_strike_price, buy_strike_price, strike_date, do_tech_idx_dict, typ)
+					probability_reuslt_dict_all[keys_all] = copy.deepcopy(probability_reuslt_dict)
 				#print (win_probability_dict_sell)
 
 				## buy part
@@ -397,13 +417,16 @@ class Trader(object):
 				#	win_probability_dict_buy[keys_all] = copy.deepcopy((probability_reuslt_dict['all'] - probability_reuslt_dict['unhit']) / probability_reuslt_dict['all'])
 				
 				if typ == 'call':
-					except_value = win_probability_dict_sell['MA-MACD-D-RSI-Pressed_point'] * combin_contract['return_on_invest'] #- (1 - win_probability_dict_sell['MA-MACD-D-RSI-Pressed_point']) * combin_contract['risk_max']
-					#print (win_probability_dict_sell['MA-MACD-D-RSI-Pressed_point'] * combin_contract['return_on_invest'] - win_probability_dict_buy['MA-MACD-D-RSI-Pressed_point'] * combin_contract['risk_max'], \
-					#	win_probability_dict_sell['MA-MACD-D-RSI-Pressed_point'], combin_contract['return_on_invest'], win_probability_dict_buy['MA-MACD-D-RSI-Pressed_point'], combin_contract['risk_max'])
+					prob_dict = probability_reuslt_dict_all['MACD-D-Pressed_point']
+					except_value = (prob_dict['p1']/prob_dict['all']) * combin_contract['return_on_invest'] \
+								+ (prob_dict['p2']/prob_dict['all']) * (sell_strike_price-buy_strike_price-combin_contract['ask']) \
+								+ (prob_dict['p3']/prob_dict['all']) * (sell_strike_price-sell_strike_price)
 				elif typ == 'put':
-					except_value = win_probability_dict_sell['MA-MACD-D-RSI-Supported_point'] * combin_contract['return_on_invest'] #- (1 - win_probability_dict_sell['MA-MACD-D-RSI-Supported_point']) * combin_contract['risk_max']
-					#print (win_probability_dict_sell['MA-MACD-D-RSI-Supported_point'] * combin_contract['return_on_invest'] - win_probability_dict_buy['MA-MACD-D-RSI-Supported_point'] * combin_contract['risk_max'], \
-					#	win_probability_dict_sell['MA-MACD-D-RSI-Supported_point'], combin_contract['return_on_invest'], win_probability_dict_buy['MA-MACD-D-RSI-Supported_point'], combin_contract['risk_max'])
+					prob_dict = probability_reuslt_dict_all['MACD-D-Supported_point']
+					except_value = (prob_dict['p1']/prob_dict['all']) * combin_contract['return_on_invest'] \
+								+ (prob_dict['p2']/prob_dict['all']) * (buy_strike_price-sell_strike_price-combin_contract['ask']) \
+								+ (prob_dict['p3']/prob_dict['all']) * (buy_strike_price-sell_strike_price)
+
 				else:
 					assert False, 'wrong with except_value tpye: {}'.format(typ)
 				#if except_value > 0:
@@ -415,8 +438,10 @@ class Trader(object):
 					best_combin_contract['buy_contractSymbol'] = combin_contract['buy_contractSymbol']
 					best_combin_contract['except_value'] = except_value
 					best_combin_contract['sample_num'] = probability_reuslt_dict['all']
-					best_combin_contract['un_hit_probability'] = probability_reuslt_dict['unhit'] / probability_reuslt_dict['all']
-					best_combin_contract_all[strike_date] = copy.deepcopy(best_combin_contract)
+					best_combin_contract['un_hit_probability'] = probability_reuslt_dict['p1'] / probability_reuslt_dict['all']
+					best_combin_contract['return_on_invest'] = combin_contract['return_on_invest']
+					if best_combin_contract['un_hit_probability'] > 0.5:
+						best_combin_contract_all[strike_date] = copy.deepcopy(best_combin_contract)
 		return best_combin_contract_all
 
 

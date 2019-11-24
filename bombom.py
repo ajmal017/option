@@ -110,7 +110,7 @@ class Trader(object):
 		self.roe_ttm = roe_ttm
 		self.stock_folder_path = stock_folder_path
 		self.option_folder_path = option_folder_path
-		self.option_com_order_folder_path = 'final'
+		self.option_com_order_folder_path = 'final_'+time.strftime("%Y-%m-%d", time.localtime())
 		self.value_group = -1
 		self.top_volume_num = 10
 		self.part_num = 100
@@ -380,6 +380,7 @@ class Trader(object):
 				sell_strike_price = combin_contract['sell_strike_price']
 				buy_strike_price = combin_contract['buy_strike_price']
 				strike_date = combin_contract['sell_strike_date']
+				probability_reuslt_dict_all = {}
 				for keys in keys_list:
 					if typ == 'put':
 						keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
@@ -418,14 +419,14 @@ class Trader(object):
 				
 				if typ == 'call':
 					prob_dict = probability_reuslt_dict_all['MACD-D-Pressed_point']
-					except_value = (prob_dict['p1']/prob_dict['all']) * combin_contract['return_on_invest'] \
-								+ (prob_dict['p2']/prob_dict['all']) * (sell_strike_price-buy_strike_price-combin_contract['ask']) \
-								+ (prob_dict['p3']/prob_dict['all']) * (sell_strike_price-sell_strike_price)
+					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * combin_contract['return_on_invest'] \
+								+ (prob_dict['p2']/(prob_dict['all']+0.001)) * (sell_strike_price-buy_strike_price-combin_contract['ask']) \
+								+ (prob_dict['p3']/(prob_dict['all']+0.001)) * (sell_strike_price-sell_strike_price)
 				elif typ == 'put':
 					prob_dict = probability_reuslt_dict_all['MACD-D-Supported_point']
-					except_value = (prob_dict['p1']/prob_dict['all']) * combin_contract['return_on_invest'] \
-								+ (prob_dict['p2']/prob_dict['all']) * (buy_strike_price-sell_strike_price-combin_contract['ask']) \
-								+ (prob_dict['p3']/prob_dict['all']) * (buy_strike_price-sell_strike_price)
+					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * combin_contract['return_on_invest'] \
+								+ (prob_dict['p2']/(prob_dict['all']+0.001)) * (buy_strike_price-sell_strike_price-combin_contract['ask']) \
+								+ (prob_dict['p3']/(prob_dict['all']+0.001)) * (buy_strike_price-sell_strike_price)
 
 				else:
 					assert False, 'wrong with except_value tpye: {}'.format(typ)
@@ -452,7 +453,7 @@ class Trader(object):
 		#print (sell_contracts_list, buy_contracts_list)
 		# PCS=SP+BP, the strike of SP need to > BP
 		#### hard code parameter, don't care this parameter right now ###
-		combine_contract_delta_value = 2
+		combine_contract_delta_value = 3
 		if contract_type == 'put':
 			for sell_contracts_dict in sell_contracts_list:
 				for buy_contracts_dict in buy_contracts_list:
@@ -480,6 +481,8 @@ class Trader(object):
 					buy_strike = float(buy_contracts_dict['strike'])
 
 					combin_contract_dict['return_on_invest'] = (sell_bid - buy_ask) / (sell_strike+0.00000001)
+					combin_contract_dict['bid'] = sell_bid
+					combin_contract_dict['ask'] = buy_ask
 					combin_contract_dict['risk_max'] = (buy_strike - sell_strike + sell_bid - buy_ask) / (sell_strike+0.00000001)
 					#print (sell_bid, buy_ask, sell_strike, combin_contract_dict['return_on_invest'])
 					#print (str(combin_contract_dict['return_on_invest'])=='nan', str(combin_contract_dict['risk_max'])=='nan')
@@ -496,6 +499,7 @@ class Trader(object):
 					combin_contract_dict['buy_strike_date'] = copy.deepcopy(buy_contracts_dict['date'][0])
 					combin_contract_dict['sell_strike_price'] = copy.deepcopy(sell_contracts_dict['strike'][0])
 					combin_contract_dict['buy_strike_price'] = copy.deepcopy(buy_contracts_dict['strike'][0])
+
 					combin_contract_dict['string'] = sell_contracts_dict['put_string']
 					combin_contract_dict_temp = copy.deepcopy(combin_contract_dict)
 					PCS_combin_contract_list.append(combin_contract_dict_temp)
@@ -529,6 +533,8 @@ class Trader(object):
 					buy_strike = float(buy_contracts_dict['strike'])
 
 					combin_contract_dict['return_on_invest'] = (sell_bid - buy_ask) / (sell_strike+0.00000001)
+					combin_contract_dict['bid'] = sell_bid
+					combin_contract_dict['ask'] = buy_ask
 					combin_contract_dict['risk_max'] = (buy_strike - sell_strike + sell_bid - buy_ask) / (sell_strike+0.00000001)
 					if str(combin_contract_dict['return_on_invest'])=='nan' or \
 						str(combin_contract_dict['risk_max'])=='nan' or \
@@ -1873,6 +1879,8 @@ class Trader(object):
 			sav_option_com_order_csv_path = '{}.csv'.format(os.path.join(self.option_com_order_folder_path, stock_name))
 			if not os.path.exists(self.option_folder_path):
 				os.mkdir(self.option_folder_path)
+			if not os.path.exists(self.option_com_order_folder_path):
+				os.mkdir(self.option_com_order_folder_path)
 
 			df = self.crawl_price(stock_name)
 			if len(df) < self.min_days:
@@ -1897,6 +1905,11 @@ class Trader(object):
 
 			print ('worker number {}, stock_name is {}'.format(workers_num, stock_name))
 
+
+			best_combin_contract_all_json = json.dumps(best_combin_contract_all)
+			if len(best_combin_contract_all) > 10:
+				with open(options_com_order_csv_path, 'w') as f_w:
+					f_w.write(best_combin_contract_all_json)
 			#time.sleep(5)
 			#stock_queues.put(stock_name)
 

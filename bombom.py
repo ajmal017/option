@@ -125,6 +125,7 @@ class Trader(object):
 		self.CCS_return_on_invest = 0.03
 		self.min_days = 300 * 6
 		self.interval_value_point = 3
+		self.combine_contract_delta_value = 10
 
 	def bset_contract(self, stock_name):
 		period_days = 5
@@ -453,7 +454,7 @@ class Trader(object):
 		#print (sell_contracts_list, buy_contracts_list)
 		# PCS=SP+BP, the strike of SP need to > BP
 		#### hard code parameter, don't care this parameter right now ###
-		combine_contract_delta_value = 3
+		combine_contract_delta_value = self.combine_contract_delta_value
 		if contract_type == 'put':
 			for sell_contracts_dict in sell_contracts_list:
 				for buy_contracts_dict in buy_contracts_list:
@@ -1907,7 +1908,8 @@ class Trader(object):
 
 
 			best_combin_contract_all_json = json.dumps(best_combin_contract_all)
-			if len(best_combin_contract_all) > 10:
+			print (len(best_combin_contract_all) != 0, len(best_combin_contract_all))
+			if len(best_combin_contract_all) != 0:
 				with open(options_com_order_csv_path, 'w') as f_w:
 					f_w.write(best_combin_contract_all_json)
 			#time.sleep(5)

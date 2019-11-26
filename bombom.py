@@ -568,7 +568,7 @@ class Trader(object):
 						continue
 					if sell_bid <= buy_ask:
 						continue
-					if sell_contracts_dict['lasted_close']*self.sc_close_ratio > sell_contracts_dict['strike']:
+					if sell_contracts_dict['lasted_close']*self.sc_close_ratio < sell_contracts_dict['strike']:
 						continue
 					sell_strike = float(sell_contracts_dict['strike'])
 					buy_strike = float(buy_contracts_dict['strike'])

@@ -371,6 +371,7 @@ class Trader(object):
 		# 技術指標全部都看，期望值最高的
 		# 技術指標全部都看，然後勝率最高的
 		best_combin_contract_all = {}
+		best_combin_contract_all_list = []
 		for combin_contract_list in combin_contract_list_all:
 			#print (combin_contract_list)
 			best_combin_contract = {'sell_contractSymbol': -1, \
@@ -438,7 +439,8 @@ class Trader(object):
 				#if except_value > 0:
 				#	print ('except_value: ', except_value, combin_contract['sell_contractSymbol'])#, combin_contract['buy_contractSymbol'])
 
-				if best_combin_contract['except_value'] < except_value:
+				#if best_combin_contract['except_value'] < except_value:
+				if True:
 					best_combin_contract['close'] = combin_contract['lasted_close']
 					best_combin_contract['sell_contractSymbol'] = combin_contract['sell_contractSymbol']
 					best_combin_contract['buy_contractSymbol'] = combin_contract['buy_contractSymbol']
@@ -446,9 +448,12 @@ class Trader(object):
 					best_combin_contract['sample_num'] = probability_reuslt_dict['all']
 					best_combin_contract['un_hit_probability'] = probability_reuslt_dict['p1'] / probability_reuslt_dict['all']
 					best_combin_contract['return_on_invest'] = combin_contract['return_on_invest']
+					best_combin_contract['date'] = strike_date
 					if best_combin_contract['un_hit_probability'] > 0.5:
-						best_combin_contract_all[strike_date] = copy.deepcopy(best_combin_contract)
-		return best_combin_contract_all
+						#best_combin_contract_all[strike_date] = copy.deepcopy(best_combin_contract)
+						best_combin_contract_all_list.append(copy.deepcopy(best_combin_contract))
+		return best_combin_contract_all_list
+		#return best_combin_contract_all
 
 
 	def get_best_combination_contract(self, sell_contracts_list, buy_contracts_list, contract_type):

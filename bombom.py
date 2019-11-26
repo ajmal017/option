@@ -126,6 +126,10 @@ class Trader(object):
 		self.min_days = 300 * 6
 		self.interval_value_point = 3
 		self.combine_contract_delta_value = 10
+		self.combine_contract_ratio = 0.9
+		self.sp_close_ratio = 0.7
+		self.sc_close_ratio = 1.3
+		self.analysis_statement_status = 1  #0: don't care, 1: basic(volume & optionable), 2: all function in analysis_statement()
 
 	def bset_contract(self, stock_name):
 		period_days = 5
@@ -420,14 +424,14 @@ class Trader(object):
 				
 				if typ == 'call':
 					prob_dict = probability_reuslt_dict_all['MACD-D-Pressed_point']
-					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * combin_contract['return_on_invest'] \
-								+ (prob_dict['p2']/(prob_dict['all']+0.001)) * (sell_strike_price-buy_strike_price-combin_contract['ask']) \
-								+ (prob_dict['p3']/(prob_dict['all']+0.001)) * (sell_strike_price-sell_strike_price)
+					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * (combin_contract['bid']-combin_contract['ask']) \
+								+ (prob_dict['p2']/(prob_dict['all']+0.001)) * (sell_strike_price-buy_strike_price+combin_contract['bid']-combin_contract['ask']) \
+								+ (prob_dict['p3']/(prob_dict['all']+0.001)) * (sell_strike_price-buy_strike_price+combin_contract['bid']-combin_contract['ask'])
 				elif typ == 'put':
 					prob_dict = probability_reuslt_dict_all['MACD-D-Supported_point']
-					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * combin_contract['return_on_invest'] \
-								+ (prob_dict['p2']/(prob_dict['all']+0.001)) * (buy_strike_price-sell_strike_price-combin_contract['ask']) \
-								+ (prob_dict['p3']/(prob_dict['all']+0.001)) * (buy_strike_price-sell_strike_price)
+					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * (combin_contract['bid']-combin_contract['ask']) \
+								+ (prob_dict['p2']/(prob_dict['all']+0.001)) * (buy_strike_price-sell_strike_price+combin_contract['bid']-combin_contract['ask']) \
+								+ (prob_dict['p3']/(prob_dict['all']+0.001)) * (buy_strike_price-sell_strike_price+combin_contract['bid']-combin_contract['ask'])
 
 				else:
 					assert False, 'wrong with except_value tpye: {}'.format(typ)
@@ -477,6 +481,8 @@ class Trader(object):
 						continue
 					if sell_bid <= buy_ask:
 						continue
+					if sell_contracts_dict['lasted_close']*self.sp_close_ratio > sell_contracts_dict['strike']:
+						continue
 					#print (sell_contracts_dict['strike'] < buy_contracts_dict['strike'], sell_contracts_dict['strike'], buy_contracts_dict['strike'])
 					sell_strike = float(sell_contracts_dict['strike'])
 					buy_strike = float(buy_contracts_dict['strike'])
@@ -492,8 +498,11 @@ class Trader(object):
 						combin_contract_dict['return_on_invest'] < self.PCS_return_on_invest:
 						continue
 					#min_value_delta = (sell_strike - buy_strike) if (sell_strike - buy_strike) < min_value_delta else min_value_delta
-					if combine_contract_delta_value < (sell_strike - buy_strike):
+					#if combine_contract_delta_value < (sell_strike - buy_strike):
+					#	continue
+					if (buy_strike / sell_strike) < self.combine_contract_ratio:
 						continue
+					
 					combin_contract_dict['sell_contractSymbol'] = copy.deepcopy(sell_contracts_dict['contractSymbol'][0])
 					combin_contract_dict['buy_contractSymbol'] = copy.deepcopy(buy_contracts_dict['contractSymbol'][0])
 					combin_contract_dict['sell_strike_date'] = copy.deepcopy(sell_contracts_dict['date'][0])
@@ -529,7 +538,8 @@ class Trader(object):
 						continue
 					if sell_bid <= buy_ask:
 						continue
-
+					if sell_contracts_dict['lasted_close']*self.sc_close_ratio > sell_contracts_dict['strike']:
+						continue
 					sell_strike = float(sell_contracts_dict['strike'])
 					buy_strike = float(buy_contracts_dict['strike'])
 
@@ -542,8 +552,11 @@ class Trader(object):
 						combin_contract_dict['return_on_invest'] < self.CCS_return_on_invest:
 						continue
 					#min_value_delta = (buy_strike - sell_strike) if (buy_strike - sell_strike) < min_value_delta else min_value_delta
-					if combine_contract_delta_value < (buy_strike - sell_strike):
+					#if combine_contract_delta_value < (buy_strike - sell_strike):
+					#	continue
+					if (sell_strike / buy_strike) < self.combine_contract_ratio:
 						continue
+
 					combin_contract_dict['sell_contractSymbol'] = copy.deepcopy(sell_contracts_dict['contractSymbol'][0])
 					combin_contract_dict['buy_contractSymbol'] = copy.deepcopy(buy_contracts_dict['contractSymbol'][0])
 					combin_contract_dict['sell_strike_date'] = copy.deepcopy(sell_contracts_dict['date'][0])
@@ -1828,33 +1841,36 @@ class Trader(object):
 
 	def analysis_statement(self, stock_name):
 		stock_dict = finviz.get_stock(stock_name)
+		if self.analysis_statement_status == 0:
+			return True
 		if not stock_dict['Optionable'] == 'Yes':
 			#print ('unOptionable')
 			return False
 		if not 'M' in stock_dict['Avg Volume']:
 			#print ('low Volume')
 			return False
-		if '-' in stock_dict['ROE']:
-			#print ('-roe')
-			return False
-		if float(stock_dict['ROE'][:-1]) < 10.0:
-			#print ('roe')
-			return False
-		if '-' in stock_dict['EPS Q/Q']:
-			#print (stock_name, 'EPS Q/Q')
-			#print ('eps')
-			return False
-		if '-' in stock_dict['EPS next Q']:
-			#print (stock_name, 'EPS next Q')
-			#print ('eps2')
-			return False
-		if '-' in stock_dict['Sales Q/Q']:
-			#print (stock_name, 'EPS next Q')
-			#print ('eps2')
-			return False
+		if self.analysis_statement_status == 2:
+			if '-' in stock_dict['ROE']:
+				#print ('-roe')
+				return False
+			if float(stock_dict['ROE'][:-1]) < 10.0:
+				#print ('roe')
+				return False
+			if '-' in stock_dict['EPS Q/Q']:
+				#print (stock_name, 'EPS Q/Q')
+				#print ('eps')
+				return False
+			if '-' in stock_dict['EPS next Q']:
+				#print (stock_name, 'EPS next Q')
+				#print ('eps2')
+				return False
+			if '-' in stock_dict['Sales Q/Q']:
+				#print (stock_name, 'EPS next Q')
+				#print ('eps2')
+				return False
 
 		return True
-		#if 'K' stock_dict['Avg Volume'] or :
+
 
 # Optionable
 # Avg Volume
@@ -1872,8 +1888,8 @@ class Trader(object):
 		while not stock_queues.empty():
 			fail_flag = False
 			stock_name = stock_queues.get()
-			#if not self.analysis_statement(stock_name):
-			#	continue
+			if not self.analysis_statement(stock_name):
+				continue
 
 			sav_stock_csv_path = '{}.csv'.format(os.path.join(self.stock_folder_path, stock_name))
 			sav_option_csv_path = '{}.csv'.format(os.path.join(self.option_folder_path, stock_name))
@@ -1906,14 +1922,15 @@ class Trader(object):
 
 			print ('worker number {}, stock_name is {}'.format(workers_num, stock_name))
 
+#			for date in best_combin_contract_all.keys():
+
 
 			best_combin_contract_all_json = json.dumps(best_combin_contract_all)
 			print (len(best_combin_contract_all) != 0, len(best_combin_contract_all))
 			if len(best_combin_contract_all) != 0:
 				with open(options_com_order_csv_path, 'w') as f_w:
 					f_w.write(best_combin_contract_all_json)
-			#time.sleep(5)
-			#stock_queues.put(stock_name)
+
 
 	@staticmethod
 	def crawl_price(stock_id):

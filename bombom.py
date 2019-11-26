@@ -216,6 +216,7 @@ class Trader(object):
 	def check_vaild_sample(do_tech_idx_dict, today_tech_idx, strike_price):
 		for tech_idx in do_tech_idx_dict.keys():
 			if 'Supported_point' in tech_idx:
+				'''
 				close_value = today_tech_idx['Close'].values
 				Supported_point_dict = json.loads(u'{}'.format(do_tech_idx_dict[tech_idx][0]))
 				with_sup_pnt_flag = False
@@ -224,13 +225,34 @@ class Trader(object):
 						with_sup_pnt_flag = True
 				if not with_sup_pnt_flag:
 					return False
+					'''
+				close_value = today_tech_idx['Close'].values
+				pcs_ratio = strike_price / close_value
+				Supported_point_dict = json.loads(u'{}'.format(do_tech_idx_dict[tech_idx][0]))
+				with_sup_pnt_flag = False
+				for sup_pnt_value in Supported_point_dict.keys():
+					if close_value > sup_pnt_value > close_value*pcs_ratio:
+						with_sup_pnt_flag = True
+				if not with_sup_pnt_flag:
+					return False
 
 			elif 'Pressed_point' in tech_idx:
+				'''
 				close_value = today_tech_idx['Close'].values
 				Pressed_point_dict = json.loads(u'{}'.format(do_tech_idx_dict[tech_idx][0]))
 				with_press_pnt_flag = False
 				for press_pnt_value in Pressed_point_dict.keys():
 					if close_value < float(press_pnt_value) and float(press_pnt_value) < strike_price:
+						with_press_pnt_flag = True
+				if not with_press_pnt_flag:
+					return False
+					'''
+				close_value = today_tech_idx['Close'].values
+				ccs_ratio = strike_price / close_value
+				Pressed_point_dict = json.loads(u'{}'.format(do_tech_idx_dict[tech_idx][0]))
+				with_press_pnt_flag = False
+				for press_pnt_value in Pressed_point_dict.keys():
+					if close_value < press_pnt_value < close_value*ccs_ratio:
 						with_press_pnt_flag = True
 				if not with_press_pnt_flag:
 					return False
@@ -446,7 +468,7 @@ class Trader(object):
 					best_combin_contract['buy_contractSymbol'] = combin_contract['buy_contractSymbol']
 					best_combin_contract['except_value'] = except_value
 					best_combin_contract['sample_num'] = probability_reuslt_dict['all']
-					best_combin_contract['un_hit_probability'] = probability_reuslt_dict['p1'] / probability_reuslt_dict['all']
+					best_combin_contract['un_hit_probability'] = probability_reuslt_dict['p1'] / (probability_reuslt_dict['all']+0.001)
 					best_combin_contract['return_on_invest'] = combin_contract['return_on_invest']
 					best_combin_contract['date'] = strike_date
 					if best_combin_contract['un_hit_probability'] > 0.5:

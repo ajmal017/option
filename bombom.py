@@ -65,6 +65,7 @@ import datetime
 from datetime import timedelta
 from datetime import date as dt
 
+import glob
 
 #print (finviz.get_stock('AMD'))
 #assert False
@@ -110,6 +111,8 @@ class Trader(object):
 		self.roe_ttm = roe_ttm
 		self.stock_folder_path = stock_folder_path
 		self.option_folder_path = option_folder_path
+		self.techidx_folder_path = 'techidx'
+		
 		self.option_com_order_folder_path = 'final_'+time.strftime("%Y-%m-%d", time.localtime())
 		self.value_group = -1
 		self.top_volume_num = 10
@@ -231,7 +234,7 @@ class Trader(object):
 				Supported_point_dict = json.loads(u'{}'.format(do_tech_idx_dict[tech_idx][0]))
 				with_sup_pnt_flag = False
 				for sup_pnt_value in Supported_point_dict.keys():
-					if close_value > sup_pnt_value > close_value*pcs_ratio:
+					if close_value > float(sup_pnt_value) and float(sup_pnt_value) > close_value*pcs_ratio:
 						with_sup_pnt_flag = True
 				if not with_sup_pnt_flag:
 					return False
@@ -252,7 +255,7 @@ class Trader(object):
 				Pressed_point_dict = json.loads(u'{}'.format(do_tech_idx_dict[tech_idx][0]))
 				with_press_pnt_flag = False
 				for press_pnt_value in Pressed_point_dict.keys():
-					if close_value < press_pnt_value < close_value*ccs_ratio:
+					if close_value < float(press_pnt_value) and float(press_pnt_value) < close_value*ccs_ratio:
 						with_press_pnt_flag = True
 				if not with_press_pnt_flag:
 					return False
@@ -1925,7 +1928,8 @@ class Trader(object):
 				os.mkdir(self.option_folder_path)
 			if not os.path.exists(self.option_com_order_folder_path):
 				os.mkdir(self.option_com_order_folder_path)
-
+			if not os.path.exists(self.techidx_folder_path):
+				os.mkdir(self.techidx_folder_path)
 			df = self.crawl_price(stock_name)
 			if len(df) < self.min_days:
 				continue
@@ -1935,6 +1939,7 @@ class Trader(object):
 			#self.output_report(stock_name, sav_option_csv_path, sav_option_com_order_csv_path, result_all)
 			#print (sav_stock_csv_path, sav_option_csv_path, sav_option_com_order_csv_path)
 			tech_idx_path = 'techidx/{}.csv'.format(stock_name)
+
 			options_contract_file_path = 'options/{}.csv'.format(stock_name)
 			sav_stock_csv_path = '{}.csv'.format(os.path.join(self.stock_folder_path, stock_name))
 			options_file_path = '{}.csv'.format(os.path.join(self.option_folder_path, stock_name))
@@ -1957,7 +1962,6 @@ class Trader(object):
 			if len(best_combin_contract_all) != 0:
 				with open(options_com_order_csv_path, 'w') as f_w:
 					f_w.write(best_combin_contract_all_json)
-
 
 	@staticmethod
 	def crawl_price(stock_id):
@@ -2428,9 +2432,65 @@ def main_back_testing():
 	probability = t.back_testing_byDTree(tech_idx_path, tech_idx_dict_today)
 	print (probability)
 	'''
+def sorted_by_prob(final_csv_list_all, sorted_item):
+	#print (final_csv_list_all)
+	final_csv_list_all_sorted = []
+	for final_csv_dict in final_csv_list_all:
+		under_idx = 0
+		for final_csv_dict_sorted in final_csv_list_all_sorted:
+			if final_csv_dict_sorted[sorted_item] > final_csv_dict[sorted_item]:
+				under_idx+=1
+		final_csv_list_all_sorted.insert(under_idx, final_csv_dict)
+	print (final_csv_list_all_sorted)
+	#input('wait')
+	return final_csv_list_all_sorted
+
+def main_combine_csv():
+	period_days = 5
+	difference_rate = 0.1
+	stock_folder_path = 'stocks'
+	options_folder_path = 'options'
+	roe_ttm = 1
+	t = Trader(period_days, difference_rate, stock_folder_path, options_folder_path, roe_ttm)
+
+	final_csv_list_all = []
+	for final_csv in glob.glob('{}/*.csv'.format(t.option_com_order_folder_path)):
+		with open(final_csv, 'r') as f_r:
+			final_csv_list = json.loads(f_r.readlines()[0])
+			final_csv_list_all.extend(final_csv_list)
+			#print (final_csv_list_all)
+
+	#final_csv_list_all = sorted_by_prob(final_csv_list_all, 'un_hit_probability')
+
+	with open(os.path.join(t.option_com_order_folder_path, 'ALL.csv'), 'w', newline='') as csvfile:
+		writer = csv.writer(csvfile)
+		#item_list = ['sell_contractSymbol', 'buy_contractSymbol', 'except_value', 'sample_num', 'close', 'un_hit_probability', 'return_on_invest', 'date']
+		item_list = ['type', 'stock', 'sell_strike', 'buy_strike', 'except_value', 'sample_num', 'close', 'un_hit_probability', 'return_on_invest', 'date']
+		writer.writerow(item_list)
+		for final_csv_dict in final_csv_list_all:
+			content_list = []
+			for item in item_list:
+				if item in ['type', 'stock', 'sell_strike', 'buy_strike']:
+					date = final_csv_dict['date'].split('-')[0][2:] + final_csv_dict['date'].split('-')[1] + final_csv_dict['date'].split('-')[2]
+					stock = final_csv_dict['sell_contractSymbol'][:final_csv_dict['sell_contractSymbol'].find(date)]
+					typ_s = final_csv_dict['sell_contractSymbol'][final_csv_dict['sell_contractSymbol'].find(date)+len(date):final_csv_dict['sell_contractSymbol'].find(date)+len(date)+1]
+					typ = 'PCS' if typ_s == 'P' else 'CCS'
+					sell_strike = int(final_csv_dict['sell_contractSymbol'][-7:len(final_csv_dict['buy_contractSymbol'])]) / 1000
+					buy_strike = int(final_csv_dict['buy_contractSymbol'][-7:len(final_csv_dict['buy_contractSymbol'])]) / 1000
+					content_list.append(typ)
+					content_list.append(stock)
+					content_list.append(sell_strike)
+					content_list.append(buy_strike)
+				else:
+					try:
+						content_list.append(round(float(final_csv_dict[item]), t.interval_value_point))
+					except:
+						content_list.append(final_csv_dict[item])
+			writer.writerow(content_list)
 
 if __name__ == '__main__':
-	main()
+	#main()
+	main_combine_csv()
 	#main_update_lookuptable()
 	#main_best_contract()
 	#main_test()

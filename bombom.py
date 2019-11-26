@@ -507,7 +507,7 @@ class Trader(object):
 					buy_ask = float(buy_contracts_dict['ask'])
 					#print (sell_bid, sell_contracts_dict['strike'], buy_ask, buy_contracts_dict['strike'])
 					#print (sell_contracts_dict['strike'] < buy_contracts_dict['strike'], sell_contracts_dict['strike'], buy_contracts_dict['strike'])
-					if sell_contracts_dict['strike'] < buy_contracts_dict['strike']:
+					if sell_contracts_dict['strike'] <= buy_contracts_dict['strike']:
 						continue
 					if sell_bid <= buy_ask:
 						continue
@@ -564,7 +564,7 @@ class Trader(object):
 					sell_bid = float(sell_contracts_dict['bid'])
 					buy_ask = float(buy_contracts_dict['ask'])
 					#print (sell_bid, sell_contracts_dict['strike'], buy_ask, buy_contracts_dict['strike'])
-					if sell_contracts_dict['strike'] > buy_contracts_dict['strike']:
+					if sell_contracts_dict['strike'] >= buy_contracts_dict['strike']:
 						continue
 					if sell_bid <= buy_ask:
 						continue

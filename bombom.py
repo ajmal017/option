@@ -129,12 +129,13 @@ class Trader(object):
 		self.min_days = 300 * 6
 		self.interval_value_point = 3
 		self.combine_contract_delta_value = 10
-		self.combine_contract_ratio = 0.9
+		self.combine_contract_ratio = 0.8
 		self.sp_close_ratio = 0.7
 		self.sc_close_ratio = 1.3
 		self.analysis_statement_status = 1  #0: don't care, 1: basic(volume & optionable), 2: all function in analysis_statement()
+		self.un_hit_probability_thre = 0.1
 
-	def bset_contract(self, stock_name):
+	def best_contract(self, stock_name):
 		period_days = 5
 		difference_rate = 0.1
 		stock_folder_path = 'stocks'
@@ -354,6 +355,28 @@ class Trader(object):
 			bechmark_dict[key] = row_lasted[key].values
 		return bechmark_dict, keys_all
 
+	@staticmethod
+	def check_sup_press_point(row_lasted, close_value, sell_strike, contract_typ):
+		typ = 'Supported_point' if contract_typ == 'put' else 'Pressed_point'
+		if typ == 'Pressed_point':
+			Pressed_point_dict = json.loads(u'{}'.format(row_lasted[typ].values[0]))
+			with_press_pnt_flag = False
+			for press_pnt_value in Pressed_point_dict.keys():
+				if close_value < float(press_pnt_value) and float(press_pnt_value) < sell_strike:
+					with_press_pnt_flag = True
+			if not with_press_pnt_flag:
+				return False
+		elif typ == 'Supported_point':
+			Supported_point_dict = json.loads(u'{}'.format(row_lasted[typ].values[0]))
+			with_sup_pnt_flag = False
+			for sup_pnt_value in Supported_point_dict.keys():
+				if close_value < float(sup_pnt_value) and float(sup_pnt_value) < sell_strike:
+					with_sup_pnt_flag = True
+			if not with_sup_pnt_flag:
+				return False
+		else:
+			assert False, 'typ wrong with {}'.format(typ)
+
 	def back_testing(self, tech_idx_path, options_contract_file_path, combin_contract_list_all):
 		# 1. 找contract的履約價跟我們close的價差delta_p，去歷史看在到履約日期內的時間長度delta_d，
 		#		有幾次會下跌or上漲delta_p的機率
@@ -412,6 +435,8 @@ class Trader(object):
 				buy_strike_price = combin_contract['buy_strike_price']
 				strike_date = combin_contract['sell_strike_date']
 				probability_reuslt_dict_all = {}
+				if not self.check_sup_press_point(row_lasted, close_value, sell_strike_price, typ):
+					continue
 				for keys in keys_list:
 					if typ == 'put':
 						keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
@@ -474,7 +499,7 @@ class Trader(object):
 					best_combin_contract['un_hit_probability'] = probability_reuslt_dict['p1'] / (probability_reuslt_dict['all']+0.001)
 					best_combin_contract['return_on_invest'] = combin_contract['return_on_invest']
 					best_combin_contract['date'] = strike_date
-					if best_combin_contract['un_hit_probability'] > 0.5:
+					if best_combin_contract['un_hit_probability'] > self.un_hit_probability_thre:
 						#best_combin_contract_all[strike_date] = copy.deepcopy(best_combin_contract)
 						best_combin_contract_all_list.append(copy.deepcopy(best_combin_contract))
 		return best_combin_contract_all_list
@@ -1948,7 +1973,7 @@ class Trader(object):
 			if not state_flag:
 				#print ('continue')
 				continue
-			self.bset_contract(stock_name)
+			self.best_contract(stock_name)
 			best_combin_contract_all = self.back_testing(tech_idx_path, options_contract_file_path, combin_contract_list_all)
 			print (best_combin_contract_all)
 
@@ -1958,7 +1983,7 @@ class Trader(object):
 
 
 			best_combin_contract_all_json = json.dumps(best_combin_contract_all)
-			print (len(best_combin_contract_all) != 0, len(best_combin_contract_all))
+			#print (len(best_combin_contract_all) != 0, len(best_combin_contract_all))
 			if len(best_combin_contract_all) != 0:
 				with open(options_com_order_csv_path, 'w') as f_w:
 					f_w.write(best_combin_contract_all_json)
@@ -2489,8 +2514,8 @@ def main_combine_csv():
 			writer.writerow(content_list)
 
 if __name__ == '__main__':
-	#main()
-	main_combine_csv()
+	main()
+	#main_combine_csv()
 	#main_update_lookuptable()
 	#main_best_contract()
 	#main_test()

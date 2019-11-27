@@ -129,11 +129,11 @@ class Trader(object):
 		self.min_days = 300 * 6
 		self.interval_value_point = 3
 		self.combine_contract_delta_value = 10
-		self.combine_contract_ratio = 0.8
-		self.sp_close_ratio = 0.7
-		self.sc_close_ratio = 1.3
+		self.combine_contract_ratio = 0.5 #0.1##0.8
+		self.sp_close_ratio = 0.7 #0.0 #0.7
+		self.sc_close_ratio = 1.3 # 10.0 #1.3
 		self.analysis_statement_status = 1  #0: don't care, 1: basic(volume & optionable), 2: all function in analysis_statement()
-		self.un_hit_probability_thre = 0.1
+		self.un_hit_probability_thre = 0.0 #0.1
 
 	def best_contract(self, stock_name):
 		period_days = 5
@@ -362,6 +362,9 @@ class Trader(object):
 			Pressed_point_dict = json.loads(u'{}'.format(row_lasted[typ].values[0]))
 			with_press_pnt_flag = False
 			for press_pnt_value in Pressed_point_dict.keys():
+				#print (close_value, float(press_pnt_value), sell_strike)
+				#print (close_value < float(press_pnt_value), float(press_pnt_value) < sell_strike)
+				#print (close_value < float(press_pnt_value) and float(press_pnt_value) < sell_strike)
 				if close_value < float(press_pnt_value) and float(press_pnt_value) < sell_strike:
 					with_press_pnt_flag = True
 			if not with_press_pnt_flag:
@@ -370,7 +373,7 @@ class Trader(object):
 			Supported_point_dict = json.loads(u'{}'.format(row_lasted[typ].values[0]))
 			with_sup_pnt_flag = False
 			for sup_pnt_value in Supported_point_dict.keys():
-				if close_value < float(sup_pnt_value) and float(sup_pnt_value) < sell_strike:
+				if close_value > float(sup_pnt_value) and float(sup_pnt_value) > sell_strike:
 					with_sup_pnt_flag = True
 			if not with_sup_pnt_flag:
 				return False
@@ -393,7 +396,7 @@ class Trader(object):
 
 
 
-		keys_list = ['MACD-D']#['MA-MACD-D-RSI', 'MA-MACD-D', 'MA-MACD-RSI', 'MA-MACD', \
+		keys_list = ['D']#['MA-MACD-D-RSI', 'MA-MACD-D', 'MA-MACD-RSI', 'MA-MACD', \
 					#'MA-D-RSI', 'MA-D', 'MA-RSI', 'MA', \
 					#'MACD-D-RSI', 'MACD-D', 'MACD-RSI', 'MACD', \
 					#'D-RSI', 'D', 'RSI', '']
@@ -474,12 +477,12 @@ class Trader(object):
 				#	win_probability_dict_buy[keys_all] = copy.deepcopy((probability_reuslt_dict['all'] - probability_reuslt_dict['unhit']) / probability_reuslt_dict['all'])
 				
 				if typ == 'call':
-					prob_dict = probability_reuslt_dict_all['MACD-D-Pressed_point']
+					prob_dict = probability_reuslt_dict_all['D-Pressed_point']
 					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * (combin_contract['bid']-combin_contract['ask']) \
 								+ (prob_dict['p2']/(prob_dict['all']+0.001)) * (sell_strike_price-buy_strike_price+combin_contract['bid']-combin_contract['ask']) \
 								+ (prob_dict['p3']/(prob_dict['all']+0.001)) * (sell_strike_price-buy_strike_price+combin_contract['bid']-combin_contract['ask'])
 				elif typ == 'put':
-					prob_dict = probability_reuslt_dict_all['MACD-D-Supported_point']
+					prob_dict = probability_reuslt_dict_all['D-Supported_point']
 					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * (combin_contract['bid']-combin_contract['ask']) \
 								+ (prob_dict['p2']/(prob_dict['all']+0.001)) * (buy_strike_price-sell_strike_price+combin_contract['bid']-combin_contract['ask']) \
 								+ (prob_dict['p3']/(prob_dict['all']+0.001)) * (buy_strike_price-sell_strike_price+combin_contract['bid']-combin_contract['ask'])
@@ -538,6 +541,8 @@ class Trader(object):
 						continue
 					if sell_contracts_dict['lasted_close']*self.sp_close_ratio > sell_contracts_dict['strike']:
 						continue
+					if sell_contracts_dict['lasted_close'] <= sell_contracts_dict['strike']:
+						continue
 					#print (sell_contracts_dict['strike'] < buy_contracts_dict['strike'], sell_contracts_dict['strike'], buy_contracts_dict['strike'])
 					sell_strike = float(sell_contracts_dict['strike'])
 					buy_strike = float(buy_contracts_dict['strike'])
@@ -592,6 +597,8 @@ class Trader(object):
 					if sell_contracts_dict['strike'] >= buy_contracts_dict['strike']:
 						continue
 					if sell_bid <= buy_ask:
+						continue
+					if sell_contracts_dict['lasted_close'] >= sell_contracts_dict['strike']:
 						continue
 					if sell_contracts_dict['lasted_close']*self.sc_close_ratio < sell_contracts_dict['strike']:
 						continue
@@ -671,12 +678,18 @@ class Trader(object):
 				return {}, False
 
 			for date in stock_ticker.options:
+				#print (stock_ticker.option_chain(date))
 				for index, opts in enumerate(stock_ticker.option_chain(date)):
 					typ = 'call' if index == 0 else 'put'
 					point_string = bear_point_string if index == 0 else cow_point_string
 					opts_dict = opts.to_dict()
 					for idx in opts_dict['contractSymbol'].keys():
 						#opt = opts_dict[key][idx]
+						#print (opts_dict['bid'][idx], opts_dict['ask'][idx])
+						if (not '.' in str(opts_dict['bid'][idx])) or (not '.' in str(opts_dict['ask'][idx])):
+							continue
+						if int(opts_dict['bid'][idx]) == 0 or int(opts_dict['ask'][idx]) == 0:
+							continue
 						writer.writerow([typ, date, opts_dict['contractSymbol'][idx], \
 							opts_dict['strike'][idx], opts_dict['bid'][idx], opts_dict['ask'][idx], \
 							round(opts_dict['bid'][idx]/opts_dict['strike'][idx], self.interval_value_point), opts_dict['volume'][idx], \

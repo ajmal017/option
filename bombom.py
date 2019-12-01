@@ -168,7 +168,7 @@ class Trader(object):
 		stock_tech_idx_dict = t.get_MACD(file_path, stock_tech_idx_dict, Total_day_MACD=m, MACD_short=MACD_short, MACD_long=MACD_long, MACD_signallength=MACD_signallength)
 
 		stock_tech_idx_dict = t.get_supported_point(file_path, stock_tech_idx_dict, sup_pnt_close_interval=sup_pnt_close_interval, valid_percentage_sup_pnt_threthod=valid_percentage_sup_pnt_threthod)
-#		stock_tech_idx_dict = t.get_pressed_point(file_path, stock_tech_idx_dict, press_pnt_close_interval=press_pnt_close_interval, valid_percentage_press_pnt_threthod=valid_percentage_press_pnt_threthod)
+		stock_tech_idx_dict = t.get_pressed_point(file_path, stock_tech_idx_dict, press_pnt_close_interval=press_pnt_close_interval, valid_percentage_press_pnt_threthod=valid_percentage_press_pnt_threthod)
 
 		t.output_tech_idx(tech_idx_path, stock_tech_idx_dict)
 		del t
@@ -401,7 +401,7 @@ class Trader(object):
 
 
 
-		keys_list = ['MACD', 'D']#['MA-MACD-D-RSI', 'MA-MACD-D', 'MA-MACD-RSI', 'MA-MACD', \
+		keys_list = ['MACD-D']#['MA-MACD-D-RSI', 'MA-MACD-D', 'MA-MACD-RSI', 'MA-MACD', \
 					#'MA-D-RSI', 'MA-D', 'MA-RSI', 'MA', \
 					#'MACD-D-RSI', 'MACD-D', 'MACD-RSI', 'MACD', \
 					#'D-RSI', 'D', 'RSI', '']
@@ -482,12 +482,12 @@ class Trader(object):
 				#	win_probability_dict_buy[keys_all] = copy.deepcopy((probability_reuslt_dict['all'] - probability_reuslt_dict['unhit']) / probability_reuslt_dict['all'])
 				
 				if typ == 'call':
-					prob_dict = probability_reuslt_dict_all['D-Pressed_point']
+					prob_dict = probability_reuslt_dict_all['MACD-D-Pressed_point']
 					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * (combin_contract['bid']-combin_contract['ask']) \
 								+ (prob_dict['p2']/(prob_dict['all']+0.001)) * (sell_strike_price-buy_strike_price+combin_contract['bid']-combin_contract['ask']) \
 								+ (prob_dict['p3']/(prob_dict['all']+0.001)) * (sell_strike_price-buy_strike_price+combin_contract['bid']-combin_contract['ask'])
 				elif typ == 'put':
-					prob_dict = probability_reuslt_dict_all['D-Supported_point']
+					prob_dict = probability_reuslt_dict_all['MACD-D-Supported_point']
 					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * (combin_contract['bid']-combin_contract['ask']) \
 								+ (prob_dict['p2']/(prob_dict['all']+0.001)) * (buy_strike_price-sell_strike_price+combin_contract['bid']-combin_contract['ask']) \
 								+ (prob_dict['p3']/(prob_dict['all']+0.001)) * (buy_strike_price-sell_strike_price+combin_contract['bid']-combin_contract['ask'])
@@ -1244,7 +1244,7 @@ class Trader(object):
 					, stock_tech_idx_dict[date]['MA'], stock_tech_idx_dict[date]['MACD']\
 					, stock_tech_idx_dict[date]['D'], stock_tech_idx_dict[date]['RSI']\
 					, json.dumps(stock_tech_idx_dict[date]['Supported_point'])\
-					, json.dumps(stock_tech_idx_dict[date]['Pressed_point'])])
+					, json.dumps(stock_tech_idx_dict[date]['Supported_point'])])
 
 	def get_MA(self, CSV, stock_tech_idx_dict, Total_day=10*250, percent=1): #Slew_keep_day, 
 		'''

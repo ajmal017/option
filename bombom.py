@@ -2573,7 +2573,7 @@ def main_combine_csv():
 		for final_csv_dict in final_csv_list_all:
 			content_list = []
 			for item in item_list:
-				if item in ['type', 'stock', 'sell_strike', 'buy_strike']:
+				if item in ['type']:
 					date = final_csv_dict['date'].split('-')[0][2:] + final_csv_dict['date'].split('-')[1] + final_csv_dict['date'].split('-')[2]
 					stock = final_csv_dict['sell_contractSymbol'][:final_csv_dict['sell_contractSymbol'].find(date)]
 					typ_s = final_csv_dict['sell_contractSymbol'][final_csv_dict['sell_contractSymbol'].find(date)+len(date):final_csv_dict['sell_contractSymbol'].find(date)+len(date)+1]
@@ -2584,6 +2584,8 @@ def main_combine_csv():
 					content_list.append(stock)
 					content_list.append(sell_strike)
 					content_list.append(buy_strike)
+				elif item in ['stock', 'sell_strike', 'buy_strike']:
+					pass
 				else:
 					try:
 						content_list.append(round(float(final_csv_dict[item]), t.interval_value_point))
@@ -2592,8 +2594,8 @@ def main_combine_csv():
 			writer.writerow(content_list)
 
 if __name__ == '__main__':
-	main()
-	#main_combine_csv()
+	#main()
+	main_combine_csv()
 	#main_update_lookuptable()
 	#main_best_contract()
 	#main_test()

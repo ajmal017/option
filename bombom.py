@@ -135,8 +135,8 @@ class Trader(object):
 		self.analysis_statement_status = 1  #0: don't care, 1: basic(volume & optionable), 2: all function in analysis_statement()
 		self.un_hit_probability_thre = 0.0 #0.1
 
-	def best_contract(self, stock_name):
-		period_days = 5
+	def get_techidx_result(self, stock_name):
+		period_days = self.period_days
 		difference_rate = 0.1
 		stock_folder_path = 'stocks'
 		options_folder_path = 'options'
@@ -151,9 +151,9 @@ class Trader(object):
 		#start = time.time()
 		m = 20*250
 		valid_percentage_sup_pnt_threthod = 0.5
-		sup_pnt_close_interval = 100
+		sup_pnt_close_interval = self.part_num
 		valid_percentage_press_pnt_threthod = 0.5
-		press_pnt_close_interval = 100
+		press_pnt_close_interval = self.part_num
 
 		MACD_short=12
 		MACD_long=26
@@ -168,7 +168,7 @@ class Trader(object):
 		stock_tech_idx_dict = t.get_MACD(file_path, stock_tech_idx_dict, Total_day_MACD=m, MACD_short=MACD_short, MACD_long=MACD_long, MACD_signallength=MACD_signallength)
 
 		stock_tech_idx_dict = t.get_supported_point(file_path, stock_tech_idx_dict, sup_pnt_close_interval=sup_pnt_close_interval, valid_percentage_sup_pnt_threthod=valid_percentage_sup_pnt_threthod)
-		stock_tech_idx_dict = t.get_pressed_point(file_path, stock_tech_idx_dict, press_pnt_close_interval=press_pnt_close_interval, valid_percentage_press_pnt_threthod=valid_percentage_press_pnt_threthod)
+#		stock_tech_idx_dict = t.get_pressed_point(file_path, stock_tech_idx_dict, press_pnt_close_interval=press_pnt_close_interval, valid_percentage_press_pnt_threthod=valid_percentage_press_pnt_threthod)
 
 		t.output_tech_idx(tech_idx_path, stock_tech_idx_dict)
 		del t
@@ -358,10 +358,11 @@ class Trader(object):
 	@staticmethod
 	def check_sup_press_point(row_lasted, close_value, sell_strike, contract_typ):
 		typ = 'Supported_point' if contract_typ == 'put' else 'Pressed_point'
+		point_dict = json.loads(u'{}'.format(row_lasted['Supported_point'].values[0]))
 		if typ == 'Pressed_point':
-			Pressed_point_dict = json.loads(u'{}'.format(row_lasted[typ].values[0]))
+			
 			with_press_pnt_flag = False
-			for press_pnt_value in Pressed_point_dict.keys():
+			for press_pnt_value in point_dict.keys():
 				#print (close_value, float(press_pnt_value), sell_strike)
 				#print (close_value < float(press_pnt_value), float(press_pnt_value) < sell_strike)
 				#print (close_value < float(press_pnt_value) and float(press_pnt_value) < sell_strike)
@@ -369,14 +370,18 @@ class Trader(object):
 					with_press_pnt_flag = True
 			if not with_press_pnt_flag:
 				return False
+			else:
+				return True
 		elif typ == 'Supported_point':
-			Supported_point_dict = json.loads(u'{}'.format(row_lasted[typ].values[0]))
+#			point_dict = json.loads(u'{}'.format(row_lasted[typ].values[0]))
 			with_sup_pnt_flag = False
-			for sup_pnt_value in Supported_point_dict.keys():
+			for sup_pnt_value in point_dict.keys():
 				if close_value > float(sup_pnt_value) and float(sup_pnt_value) > sell_strike:
 					with_sup_pnt_flag = True
 			if not with_sup_pnt_flag:
 				return False
+			else:
+				return True
 		else:
 			assert False, 'typ wrong with {}'.format(typ)
 
@@ -396,7 +401,7 @@ class Trader(object):
 
 
 
-		keys_list = ['D']#['MA-MACD-D-RSI', 'MA-MACD-D', 'MA-MACD-RSI', 'MA-MACD', \
+		keys_list = ['MACD', 'D']#['MA-MACD-D-RSI', 'MA-MACD-D', 'MA-MACD-RSI', 'MA-MACD', \
 					#'MA-D-RSI', 'MA-D', 'MA-RSI', 'MA', \
 					#'MACD-D-RSI', 'MACD-D', 'MACD-RSI', 'MACD', \
 					#'D-RSI', 'D', 'RSI', '']
@@ -902,6 +907,22 @@ class Trader(object):
 		return stock_close_volume_sum
 
 	@staticmethod
+	def find_min_idx_in_interval2(temp_list, idx, min_pass, min_next, stock_dict, stock_date_list):
+		#Input:
+		#	temp_list: the close_list from 5 days ago ~ 5 days next
+		#	idx: main idx(today's idx)
+		#	max & min: the max & min close from 5 days ago ~ 5 days next
+		#Output:
+		#	max & min idx
+		stock_close_volume_sum = 0
+		start = 0#temp_list.index(min_pass)
+		end = len(temp_list) #temp_list.index(min_next)
+		for index in range(start, end):
+			stock_close_volume_sum+=temp_list[index]*stock_dict[stock_date_list[index]]['Volume']
+			#print ('find_min_idx_in_interval', stock_close_volume_sum)
+		return stock_close_volume_sum
+
+	@staticmethod
 	def find_max_idx_in_interval(temp_list, idx, max_pass, max_next, stock_dict, stock_date_list):
 		#Input:
 		#	temp_list: the close_list from 5 days ago ~ 5 days next
@@ -930,6 +951,22 @@ class Trader(object):
 		start = close_list.index(max_pass)
 		end = close_list.index(max_next)
 		for index in range(start, end+1):
+			stock_volume_sum+=volume_list[index]
+		return stock_volume_sum
+
+	@staticmethod
+	def get_interval_volume_sum2(close_list, volume_list, idx, max_pass, max_next, stock_date_list):
+		#Input:
+		#	temp_list: the close_list from 5 days ago ~ 5 days next
+		#	idx: main idx(today's idx)
+		#	max & min: the max & min close from 5 days ago ~ 5 days next
+		#Output:
+		#	max & min idx
+		
+		stock_volume_sum = 0
+		start = 0
+		end = len(close_list)
+		for index in range(start, end):
 			stock_volume_sum+=volume_list[index]
 		return stock_volume_sum
 
@@ -1013,26 +1050,47 @@ class Trader(object):
 			stock_date_list = stock_date_list_temp[0:idx_temp+1]
 			stock_volume_list = stock_volume_list_temp[0:idx_temp+1]
 			for idx, Close in enumerate(stock_close_list):
+				Volume_sum = 0
+				with_sup_pnt = True
+				with_pression_pnt = True
+				
 				close_max = Close if Close > close_max else close_max
 				close_interval = round((close_max / sup_pnt_close_interval), interval_value_point)
 
 				if idx < self.period_days or idx+self.period_days > len(stock_close_list):
 					continue
 
+
 				Close_five_days_pass_min = min(stock_close_list[idx-self.period_days:idx])
 				if Close >= Close_five_days_pass_min:
-					continue
+					with_sup_pnt = False
 				Close_five_days_pass_max = max(stock_close_list[idx-self.period_days:idx])
 				if Close > Close_five_days_pass_max*(1-pass_drop_rate):
-					continue
+					with_sup_pnt = False
 				Close_five_days_next_max = max(stock_close_list[idx+1:idx+1+self.period_days])
 				if Close > Close_five_days_next_max*(1-next_drop_rate):
-					continue
+					with_sup_pnt = False
 				Close_five_days_next_min = min(stock_close_list[idx+1:idx+1+self.period_days])
 				if Close >= Close_five_days_next_min:
-					continue
+					with_sup_pnt = False
 
-				Volume_sum = self.get_interval_volume_sum(stock_close_list[idx-self.period_days:idx+1+self.period_days], \
+
+				Close_five_days_pass_max = max(stock_close_list[idx-self.period_days:idx])
+				if Close <= Close_five_days_pass_max:
+					with_pression_pnt = False
+				Close_five_days_pass_min = min(stock_close_list[idx-self.period_days:idx])
+				if Close < Close_five_days_pass_min*(1+pass_drop_rate):
+					with_pression_pnt = False
+				Close_five_days_next_min = min(stock_close_list[idx+1:idx+1+self.period_days])
+				if Close < Close_five_days_next_min*(1+next_drop_rate):
+					with_pression_pnt = False
+				Close_five_days_next_max = max(stock_close_list[idx+1:idx+1+self.period_days])
+				if Close < Close_five_days_next_max:
+					with_pression_pnt = False
+
+				if not(with_sup_pnt or with_pression_pnt):
+					continue
+				Volume_sum = self.get_interval_volume_sum2(stock_close_list[idx-self.period_days:idx+1+self.period_days], \
 												stock_volume_list[idx-self.period_days:idx+1+self.period_days], \
 												idx, Close_five_days_pass_max, Close_five_days_next_max, \
 												stock_date_list)
@@ -1047,9 +1105,16 @@ class Trader(object):
 				#Volume_Value_max = Close*stock_dict[stock_date_list[idx]]['Volume'] if Close*stock_dict[stock_date_list[idx]]['Volume'] > Volume_Value_max else Volume_Value_max
 				#Volume_max = stock_dict[stock_date_list[idx]]['Volume'] if stock_dict[stock_date_list[idx]]['Volume'] > Volume_max else Volume_max
 				support_list.append(support_dict)
+			if idx > len(stock_close_list_temp)-2:
+				with open(file_path.replace('stocks', 'suppnt'), 'w') as f_w:
+					for sup_pnt in support_list:
+						f_w.write('{}\t{}\t{}\n'.format(sup_pnt['Date'], sup_pnt['Volume_sum'],sup_pnt['Close']))
 			sup_pnt_dict_final = self.process_pnt_list_to_interval(support_list, sup_pnt_close_interval, close_interval, interval_value_point, valid_percentage_sup_pnt_threthod)
+
 			sup_pnt_dict_final_all[stock_date_list_temp[idx_temp]] = copy.deepcopy(sup_pnt_dict_final)
+
 		stock_tech_idx_dict = self.combine_pnt(stock_tech_idx_dict, sup_pnt_dict_final_all, 'Supported_point')
+		stock_tech_idx_dict = self.combine_pnt(stock_tech_idx_dict, sup_pnt_dict_final_all, 'Pressed_point')
 		return stock_tech_idx_dict
 
 	def get_pressed_point(self, file_path, stock_tech_idx_dict, press_pnt_close_interval=100, valid_percentage_press_pnt_threthod=0.5):
@@ -1986,7 +2051,7 @@ class Trader(object):
 			if not state_flag:
 				#print ('continue')
 				continue
-			self.best_contract(stock_name)
+			self.get_techidx_result(stock_name)
 			best_combin_contract_all = self.back_testing(tech_idx_path, options_contract_file_path, combin_contract_list_all)
 			print (best_combin_contract_all)
 

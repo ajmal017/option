@@ -124,8 +124,8 @@ class Trader(object):
 		self.CCS_clos_press_dist = 0.1
 		self.supported_point_rate_thre = 0.5
 		self.pressed_point_rate_thre = 0.5
-		self.PCS_return_on_invest = 0.03
-		self.CCS_return_on_invest = 0.03
+		self.PCS_return_on_invest = 0.02
+		self.CCS_return_on_invest = 0.02
 		self.min_days = 300 * 6
 		self.interval_value_point = 3
 		self.combine_contract_delta_value = 10
@@ -134,6 +134,8 @@ class Trader(object):
 		self.sc_close_ratio = 1.3 # 10.0 #1.3
 		self.analysis_statement_status = 1  #0: don't care, 1: basic(volume & optionable), 2: all function in analysis_statement()
 		self.un_hit_probability_thre = 0.0 #0.1
+
+		self.delta_d_max = 120
 
 	def get_techidx_result(self, stock_name):
 		period_days = self.period_days
@@ -737,9 +739,10 @@ class Trader(object):
 			contract_dict = copy.deepcopy(contract_dict)
 			contracts_list.append(contract_dict)
 			delta_d = self.get_date_diff(row['date'].values[0], dt.today().strftime("%Y-%m-%d"))
+			#print ('delta_d: ', delta_d, delta_d > self.delta_d_max)
 			### hard code with parameter ###
-			#if delta_d > 300:
-			#	continue
+			if delta_d > self.delta_d_max:
+				continue
 
 			if (row['type'].values != type_last or row['date'].values != date_last):
 				#del contracts_list[-1]
@@ -2021,8 +2024,8 @@ class Trader(object):
 		while not stock_queues.empty():
 			fail_flag = False
 			stock_name = stock_queues.get()
-			if not self.analysis_statement(stock_name):
-				continue
+			#if not self.analysis_statement(stock_name):
+			#	continue
 
 			sav_stock_csv_path = '{}.csv'.format(os.path.join(self.stock_folder_path, stock_name))
 			sav_option_csv_path = '{}.csv'.format(os.path.join(self.option_folder_path, stock_name))
@@ -2154,7 +2157,7 @@ def main():
 def get_stock_name_list():
 	from finviz.screener import Screener
 
-	filters = ['exch_nasd']  # Shows companies in NASDAQ which are in the S&P500
+	filters = ['geo_usa', 'sh_avgvol_o1000', 'sh_opt_option']  # Shows companies in NASDAQ which are in the S&P500
 	# Get the first 50 results sorted by price ascending
 	stock_list = Screener(filters=filters)
 
@@ -2594,8 +2597,8 @@ def main_combine_csv():
 			writer.writerow(content_list)
 
 if __name__ == '__main__':
-	#main()
-	main_combine_csv()
+	main()
+	#main_combine_csv()
 	#main_update_lookuptable()
 	#main_best_contract()
 	#main_test()

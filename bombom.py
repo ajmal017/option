@@ -431,6 +431,7 @@ class Trader(object):
 		# 技術指標全部都看，然後勝率最高的
 		best_combin_contract_all = {}
 		best_combin_contract_all_list = []
+		delta_d_probability_dict = {}
 		for combin_contract_list in combin_contract_list_all:
 			#print (combin_contract_list)
 			best_combin_contract = {'sell_contractSymbol': -1, \
@@ -445,45 +446,26 @@ class Trader(object):
 				sell_strike_price = combin_contract['sell_strike_price']
 				buy_strike_price = combin_contract['buy_strike_price']
 				strike_date = combin_contract['sell_strike_date']
+				delta_d = self.get_date_diff(strike_date, dt.today().strftime("%Y-%m-%d"))
 				probability_reuslt_dict_all = {}
 				if not self.check_sup_press_point(row_lasted, close_value, sell_strike_price, typ):
 					continue
 				for keys in keys_list:
-					if typ == 'put':
-						keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
-					elif typ == 'call':
-						keys_all = '{}-{}'.format(keys, 'Pressed_point') if keys != '' else 'Pressed_point'
+					if '{}_{}'.format(delta_d, keys_all) in delta_d_probability_dict.keys():
+						probability_reuslt_dict_all[keys_all] = delta_d_probability_dict['{}_{}'.format(delta_d, keys_all)]
 					else:
-						assert False, 'wrong with contract type: {}'.format(typ)
-					do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
-					probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, sell_strike_price, buy_strike_price, strike_date, do_tech_idx_dict, typ)
-					probability_reuslt_dict_all[keys_all] = copy.deepcopy(probability_reuslt_dict)
+						if typ == 'put':
+							keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
+						elif typ == 'call':
+							keys_all = '{}-{}'.format(keys, 'Pressed_point') if keys != '' else 'Pressed_point'
+						else:
+							assert False, 'wrong with contract type: {}'.format(typ)
+						do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
+						probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, sell_strike_price, buy_strike_price, strike_date, do_tech_idx_dict, typ)
+						probability_reuslt_dict_all[keys_all] = copy.deepcopy(probability_reuslt_dict)
 
-				for keys_all in keys_list[:-1]:
-					do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
-					probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, sell_strike_price, buy_strike_price, strike_date, do_tech_idx_dict, typ)
-					probability_reuslt_dict_all[keys_all] = copy.deepcopy(probability_reuslt_dict)
-				#print (win_probability_dict_sell)
+						delta_d_probability_dict['{}_{}'.format(delta_d, keys_all)] = copy.deepcopy(probability_reuslt_dict)
 
-				## buy part
-				#strike_price = combin_contract['buy_strike_price']
-				#strike_date = combin_contract['buy_strike_date']
-				#for keys in keys_list:
-				#	if typ == 'put':
-				#		keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
-				#	elif typ == 'call':
-				#		keys_all = '{}-{}'.format(keys, 'Pressed_point') if keys != '' else 'Pressed_point'
-				#	else:
-				#		assert False, 'wrong with contract type: {}'.format(typ)
-				#	do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
-				#	probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
-				#	win_probability_dict_buy[keys_all] = copy.deepcopy((probability_reuslt_dict['all'] - probability_reuslt_dict['unhit']) / probability_reuslt_dict['all'])
-				#
-				#for keys_all in keys_list[:-1]:
-				#	do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
-				#	probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
-				#	win_probability_dict_buy[keys_all] = copy.deepcopy((probability_reuslt_dict['all'] - probability_reuslt_dict['unhit']) / probability_reuslt_dict['all'])
-				
 				if typ == 'call':
 					prob_dict = probability_reuslt_dict_all['MACD-D-Pressed_point']
 					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * (combin_contract['bid']-combin_contract['ask']) \

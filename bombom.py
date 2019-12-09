@@ -135,7 +135,7 @@ class Trader(object):
 		self.analysis_statement_status = 1  #0: don't care, 1: basic(volume & optionable), 2: all function in analysis_statement()
 		self.un_hit_probability_thre = 0.0 #0.1
 
-		self.delta_d_min = 21
+		self.delta_d_min = 0
 		self.delta_d_max = 120
 
 	def get_techidx_result(self, stock_name):
@@ -451,8 +451,8 @@ class Trader(object):
 				if not self.check_sup_press_point(row_lasted, close_value, sell_strike_price, typ):
 					continue
 				for keys in keys_list:
-					if '{}_{}'.format(delta_d, keys_all) in delta_d_probability_dict.keys():
-						probability_reuslt_dict_all[keys_all] = delta_d_probability_dict['{}_{}'.format(delta_d, keys_all)]
+					if '{}_{}_{}'.format(delta_d, sell_strike_price, keys_all) in delta_d_probability_dict.keys():
+						probability_reuslt_dict_all[keys_all] = delta_d_probability_dict['{}_{}_{}'.format(delta_d, sell_strike_price, keys_all)]
 					else:
 						if typ == 'put':
 							keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
@@ -464,7 +464,7 @@ class Trader(object):
 						probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, sell_strike_price, buy_strike_price, strike_date, do_tech_idx_dict, typ)
 						probability_reuslt_dict_all[keys_all] = copy.deepcopy(probability_reuslt_dict)
 
-						delta_d_probability_dict['{}_{}'.format(delta_d, keys_all)] = copy.deepcopy(probability_reuslt_dict)
+						delta_d_probability_dict['{}_{}_{}'.format(delta_d, sell_strike_price, keys_all)] = copy.deepcopy(probability_reuslt_dict)
 
 				if typ == 'call':
 					prob_dict = probability_reuslt_dict_all['MACD-D-Pressed_point']

@@ -451,15 +451,16 @@ class Trader(object):
 				if not self.check_sup_press_point(row_lasted, close_value, sell_strike_price, typ):
 					continue
 				for keys in keys_list:
-					if '{}_{}_{}'.format(delta_d, sell_strike_price, keys_all) in delta_d_probability_dict.keys():
-						probability_reuslt_dict_all[keys_all] = delta_d_probability_dict['{}_{}_{}'.format(delta_d, sell_strike_price, keys_all)]
+					if typ == 'put':
+						keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
+					elif typ == 'call':
+						keys_all = '{}-{}'.format(keys, 'Pressed_point') if keys != '' else 'Pressed_point'
 					else:
-						if typ == 'put':
-							keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
-						elif typ == 'call':
-							keys_all = '{}-{}'.format(keys, 'Pressed_point') if keys != '' else 'Pressed_point'
-						else:
-							assert False, 'wrong with contract type: {}'.format(typ)
+						assert False, 'wrong with contract type: {}'.format(typ)
+
+					if '{}_{}_{}'.format(delta_d, sell_strike_price, keys_all) in delta_d_probability_dict.keys():
+						probability_reuslt_dict_all[keys_all] = copy.deepcopy(delta_d_probability_dict['{}_{}_{}'.format(delta_d, sell_strike_price, keys_all)])
+					else:
 						do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
 						probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, sell_strike_price, buy_strike_price, strike_date, do_tech_idx_dict, typ)
 						probability_reuslt_dict_all[keys_all] = copy.deepcopy(probability_reuslt_dict)

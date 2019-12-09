@@ -112,7 +112,9 @@ class Trader(object):
 		self.stock_folder_path = stock_folder_path
 		self.option_folder_path = option_folder_path
 		self.techidx_folder_path = 'techidx'
+		self.pickle_folder_path = 'pickle'
 		
+
 		self.option_com_order_folder_path = 'final_'+time.strftime("%Y-%m-%d", time.localtime())
 		self.value_group = -1
 		self.top_volume_num = 10
@@ -126,7 +128,7 @@ class Trader(object):
 		self.pressed_point_rate_thre = 0.5
 		self.PCS_return_on_invest = 0.02
 		self.CCS_return_on_invest = 0.02
-		self.min_days = 300 * 6
+		self.min_days = 300 * 3
 		self.interval_value_point = 3
 		self.combine_contract_delta_value = 10
 		self.combine_contract_ratio = 0.5 #0.1##0.8
@@ -137,6 +139,31 @@ class Trader(object):
 
 		self.delta_d_min = 0
 		self.delta_d_max = 120
+
+	def techidx_to_pickle(self, stock_name):
+		tech_csv_path = os.path.join('techidx', stock_name+'.csv')
+		pickle_path = os.path.join('pickle', stock_name+'.pickle')
+		df = pd.read_csv(tech_csv_path)
+		df_shape = df.shape
+		stock_tech_idx_dict = {}
+		for num_of_date in range(1, df_shape[0]):
+			Supported_point_dict = {}
+			row = df[:][num_of_date:num_of_date+1] # Close,MA,MACD,D,RSI,Supported_point,Pressed_point
+			date = row['date'].values[0]
+			Close = row['Close'].values[0]
+			MACD = row['MACD'].values[0]
+			D = row['D'].values[0]
+			Supported_point = row['Supported_point'].values[0]
+			Supported_point = json.loads(Supported_point)
+
+
+			#print (type(Supported_point), Supported_point)
+			for k in Supported_point.keys():
+				Supported_point_dict[float(k)] = Supported_point[k]
+			stock_tech_idx_dict[str(date)] = copy.deepcopy({'D': D, 'MACD': MACD, 'MA': -1, 'RSI': -1, 'Close': Close, 'Supported_point': Supported_point, 'Pressed_point': Supported_point})
+
+		with open(pickle_path, 'wb') as f_w:
+			pickle.dump(stock_tech_idx_dict, f_w)
 
 	def get_techidx_result(self, stock_name):
 		period_days = self.period_days
@@ -152,7 +179,7 @@ class Trader(object):
 
 		#import time
 		#start = time.time()
-		m = 20*250
+		m = len(self.crawl_price(stock_name)) #20*250
 		valid_percentage_sup_pnt_threthod = 0.5
 		sup_pnt_close_interval = self.part_num
 		valid_percentage_press_pnt_threthod = 0.5
@@ -161,8 +188,21 @@ class Trader(object):
 		MACD_short=12
 		MACD_long=26
 		MACD_signallength=9
-		
-		stock_tech_idx_dict = {}
+
+		pickle_path = os.path.join(self.pickle_folder_path, stock_name+".pickle")
+		if os.path.exists(pickle_path):
+			with open(pickle_path, 'rb') as f_r:
+				stock_tech_idx_dict = pickle.load(f_r)
+			m = 300
+		elif os.path.exists(tech_idx_path):
+			self.techidx_to_pickle(stock_name)
+			with open(pickle_path, 'rb') as f_r:
+				stock_tech_idx_dict = pickle.load(f_r)
+			m = 300
+		else:
+
+			stock_tech_idx_dict = {}
+
 		stock_tech_idx_dict = t.get_stock_value(file_path, stock_tech_idx_dict, m=m)
 		stock_tech_idx_dict = t.get_KD(file_path, stock_tech_idx_dict, nBin=5, nKD=9, m=m)
 		stock_tech_idx_dict = t.get_RSI(file_path, stock_tech_idx_dict, nBin=5, n=6, m=m)
@@ -170,8 +210,11 @@ class Trader(object):
 
 		stock_tech_idx_dict = t.get_MACD(file_path, stock_tech_idx_dict, Total_day_MACD=m, MACD_short=MACD_short, MACD_long=MACD_long, MACD_signallength=MACD_signallength)
 
-		stock_tech_idx_dict = t.get_supported_point(file_path, stock_tech_idx_dict, sup_pnt_close_interval=sup_pnt_close_interval, valid_percentage_sup_pnt_threthod=valid_percentage_sup_pnt_threthod)
-		stock_tech_idx_dict = t.get_pressed_point(file_path, stock_tech_idx_dict, press_pnt_close_interval=press_pnt_close_interval, valid_percentage_press_pnt_threthod=valid_percentage_press_pnt_threthod)
+		stock_tech_idx_dict = t.get_supported_point(file_path, stock_tech_idx_dict, sup_pnt_close_interval=sup_pnt_close_interval, valid_percentage_sup_pnt_threthod=valid_percentage_sup_pnt_threthod, m=m)
+		stock_tech_idx_dict = t.get_pressed_point(file_path, stock_tech_idx_dict, press_pnt_close_interval=press_pnt_close_interval, valid_percentage_press_pnt_threthod=valid_percentage_press_pnt_threthod, m=m)
+
+		with open(pickle_path, 'wb') as f_w:
+			pickle.dump(stock_tech_idx_dict, f_w)
 
 		t.output_tech_idx(tech_idx_path, stock_tech_idx_dict)
 		del t
@@ -431,7 +474,6 @@ class Trader(object):
 		# 技術指標全部都看，然後勝率最高的
 		best_combin_contract_all = {}
 		best_combin_contract_all_list = []
-		delta_d_probability_dict = {}
 		for combin_contract_list in combin_contract_list_all:
 			#print (combin_contract_list)
 			best_combin_contract = {'sell_contractSymbol': -1, \
@@ -446,7 +488,6 @@ class Trader(object):
 				sell_strike_price = combin_contract['sell_strike_price']
 				buy_strike_price = combin_contract['buy_strike_price']
 				strike_date = combin_contract['sell_strike_date']
-				delta_d = self.get_date_diff(strike_date, dt.today().strftime("%Y-%m-%d"))
 				probability_reuslt_dict_all = {}
 				if not self.check_sup_press_point(row_lasted, close_value, sell_strike_price, typ):
 					continue
@@ -457,16 +498,35 @@ class Trader(object):
 						keys_all = '{}-{}'.format(keys, 'Pressed_point') if keys != '' else 'Pressed_point'
 					else:
 						assert False, 'wrong with contract type: {}'.format(typ)
+					do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
+					probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, sell_strike_price, buy_strike_price, strike_date, do_tech_idx_dict, typ)
+					probability_reuslt_dict_all[keys_all] = copy.deepcopy(probability_reuslt_dict)
 
-					if '{}_{}_{}'.format(delta_d, sell_strike_price, keys_all) in delta_d_probability_dict.keys():
-						probability_reuslt_dict_all[keys_all] = copy.deepcopy(delta_d_probability_dict['{}_{}_{}'.format(delta_d, sell_strike_price, keys_all)])
-					else:
-						do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
-						probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, sell_strike_price, buy_strike_price, strike_date, do_tech_idx_dict, typ)
-						probability_reuslt_dict_all[keys_all] = copy.deepcopy(probability_reuslt_dict)
+				for keys_all in keys_list[:-1]:
+					do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
+					probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, sell_strike_price, buy_strike_price, strike_date, do_tech_idx_dict, typ)
+					probability_reuslt_dict_all[keys_all] = copy.deepcopy(probability_reuslt_dict)
+				#print (win_probability_dict_sell)
 
-						delta_d_probability_dict['{}_{}_{}'.format(delta_d, sell_strike_price, keys_all)] = copy.deepcopy(probability_reuslt_dict)
-
+				## buy part
+				#strike_price = combin_contract['buy_strike_price']
+				#strike_date = combin_contract['buy_strike_date']
+				#for keys in keys_list:
+				#	if typ == 'put':
+				#		keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
+				#	elif typ == 'call':
+				#		keys_all = '{}-{}'.format(keys, 'Pressed_point') if keys != '' else 'Pressed_point'
+				#	else:
+				#		assert False, 'wrong with contract type: {}'.format(typ)
+				#	do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
+				#	probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
+				#	win_probability_dict_buy[keys_all] = copy.deepcopy((probability_reuslt_dict['all'] - probability_reuslt_dict['unhit']) / probability_reuslt_dict['all'])
+				#
+				#for keys_all in keys_list[:-1]:
+				#	do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
+				#	probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, strike_price, strike_date, do_tech_idx_dict, typ)
+				#	win_probability_dict_buy[keys_all] = copy.deepcopy((probability_reuslt_dict['all'] - probability_reuslt_dict['unhit']) / probability_reuslt_dict['all'])
+				
 				if typ == 'call':
 					prob_dict = probability_reuslt_dict_all['MACD-D-Pressed_point']
 					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * (combin_contract['bid']-combin_contract['ask']) \
@@ -498,6 +558,121 @@ class Trader(object):
 						best_combin_contract_all_list.append(copy.deepcopy(best_combin_contract))
 		return best_combin_contract_all_list
 		#return best_combin_contract_all
+
+	"""
+	def back_testing(self, tech_idx_path, options_contract_file_path, combin_contract_list_all):
+		# 1. 找contract的履約價跟我們close的價差delta_p，去歷史看在到履約日期內的時間長度delta_d，
+		#		有幾次會下跌or上漲delta_p的機率
+		# 2. 再考慮各種技術指標的組合情況
+		# MA MACD D RSI
+		# 1 1 1 1
+		# 1 1 1 0
+		# 1 1 0 1
+		# 1 1 0 0
+		# 1 0 1 1
+		# 1 0 1 0
+		# 1 0 0 1
+		# 1 0 0 0
+
+
+
+		keys_list = ['MACD-D']#['MA-MACD-D-RSI', 'MA-MACD-D', 'MA-MACD-RSI', 'MA-MACD', \
+					#'MA-D-RSI', 'MA-D', 'MA-RSI', 'MA', \
+					#'MACD-D-RSI', 'MACD-D', 'MACD-RSI', 'MACD', \
+					#'D-RSI', 'D', 'RSI', '']
+
+		#print (tech_idx_path)
+		df_tech_idx = pd.read_csv(tech_idx_path)
+		close_value = -1
+		row_lasted = -1
+
+		for num in range(1, df_tech_idx.shape[0]):
+			row_lasted = df_tech_idx[:][num:num+1]
+		#	close_value = row_lasted['Close'].values
+		#print (combin_contract_list_all)
+		#df_contracts = pd.read_csv(options_contract_file_path)
+		#for num_contracts in range(1, df_contracts.shape[0]):
+		#	row_contracts = df_contracts[:][num_contracts:num_contracts+1]
+		#	typ = row_contracts['type'].values
+		#	strike_price = row_contracts['strike'].values
+		#	strike_date = row_contracts['date'].values
+		#	print ('strike_price: {} 	strike_date: {}'.format(strike_price, strike_date))
+		win_probability_dict_buy = {}
+		win_probability_dict_sell = {}
+		# 技術指標全部都看，期望值最高的
+		# 技術指標全部都看，然後勝率最高的
+		best_combin_contract_all = {}
+		best_combin_contract_all_list = []
+		delta_d_probability_dict = {}
+		for combin_contract_list in combin_contract_list_all:
+			#print (combin_contract_list)
+			best_combin_contract = {'sell_contractSymbol': -1, \
+									'buy_contractSymbol': -1, \
+									'except_value': 0, \
+									'sample_num': -1}
+			for combin_contract in combin_contract_list:
+				print ('combin_contract: ', combin_contract)
+				close_value = combin_contract['lasted_close']
+				typ = combin_contract['contract_type'][0]
+				# sell part
+				sell_strike_price = combin_contract['sell_strike_price']
+				buy_strike_price = combin_contract['buy_strike_price']
+				strike_date = combin_contract['sell_strike_date']
+				delta_d = self.get_date_diff(strike_date, dt.today().strftime("%Y-%m-%d"))
+				probability_reuslt_dict_all = {}
+				if not self.check_sup_press_point(row_lasted, close_value, sell_strike_price, typ):
+					continue
+				for keys in keys_list:
+					if typ == 'put':
+						keys_all = '{}-{}'.format(keys, 'Supported_point') if keys != '' else 'Supported_point'
+					elif typ == 'call':
+						keys_all = '{}-{}'.format(keys, 'Pressed_point') if keys != '' else 'Pressed_point'
+					else:
+						assert False, 'wrong with contract type: {}'.format(typ)
+
+					if '{}_{}_{}'.format(delta_d, sell_strike_price, keys_all) in delta_d_probability_dict.keys():
+						print ('with')
+						probability_reuslt_dict_all[keys_all] = copy.deepcopy(delta_d_probability_dict['{}_{}_{}'.format(delta_d, sell_strike_price, keys_all)])
+					else:
+						print ('no')
+						do_tech_idx_dict, keys_all = self.get_back_testing_bechmark_keyvalues(keys_all, row_lasted)
+						probability_reuslt_dict = self.do_back_testing(tech_idx_path, close_value, sell_strike_price, buy_strike_price, strike_date, do_tech_idx_dict, typ)
+						probability_reuslt_dict_all[keys_all] = copy.deepcopy(probability_reuslt_dict)
+
+						delta_d_probability_dict['{}_{}_{}'.format(delta_d, sell_strike_price, keys_all)] = copy.deepcopy(probability_reuslt_dict)
+				input('wait')
+				if typ == 'call':
+					prob_dict = probability_reuslt_dict_all['MACD-D-Pressed_point']
+					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * (combin_contract['bid']-combin_contract['ask']) \
+								+ (prob_dict['p2']/(prob_dict['all']+0.001)) * (sell_strike_price-buy_strike_price+combin_contract['bid']-combin_contract['ask']) \
+								+ (prob_dict['p3']/(prob_dict['all']+0.001)) * (sell_strike_price-buy_strike_price+combin_contract['bid']-combin_contract['ask'])
+				elif typ == 'put':
+					prob_dict = probability_reuslt_dict_all['MACD-D-Supported_point']
+					except_value = (prob_dict['p1']/(prob_dict['all']+0.001)) * (combin_contract['bid']-combin_contract['ask']) \
+								+ (prob_dict['p2']/(prob_dict['all']+0.001)) * (buy_strike_price-sell_strike_price+combin_contract['bid']-combin_contract['ask']) \
+								+ (prob_dict['p3']/(prob_dict['all']+0.001)) * (buy_strike_price-sell_strike_price+combin_contract['bid']-combin_contract['ask'])
+
+				else:
+					assert False, 'wrong with except_value tpye: {}'.format(typ)
+				#if except_value > 0:
+				#	print ('except_value: ', except_value, combin_contract['sell_contractSymbol'])#, combin_contract['buy_contractSymbol'])
+
+				#if best_combin_contract['except_value'] < except_value:
+				if True:
+					best_combin_contract['close'] = combin_contract['lasted_close']
+					best_combin_contract['sell_contractSymbol'] = combin_contract['sell_contractSymbol']
+					best_combin_contract['buy_contractSymbol'] = combin_contract['buy_contractSymbol']
+					best_combin_contract['except_value'] = except_value
+					best_combin_contract['sample_num'] = probability_reuslt_dict['all']
+					best_combin_contract['un_hit_probability'] = probability_reuslt_dict['p1'] / (probability_reuslt_dict['all']+0.001)
+					best_combin_contract['return_on_invest'] = combin_contract['return_on_invest']
+					best_combin_contract['date'] = strike_date
+					if best_combin_contract['un_hit_probability'] > self.un_hit_probability_thre:
+						#best_combin_contract_all[strike_date] = copy.deepcopy(best_combin_contract)
+						best_combin_contract_all_list.append(copy.deepcopy(best_combin_contract))
+		return best_combin_contract_all_list
+		#return best_combin_contract_all
+		"""
 
 
 	def get_best_combination_contract(self, sell_contracts_list, buy_contracts_list, contract_type):
@@ -964,15 +1139,17 @@ class Trader(object):
 	def combine_pnt(stock_tech_idx_dict, pnt_dict_final_all, pnt_type):
 		if pnt_type == 'Supported_point':
 			for date in stock_tech_idx_dict.keys():
-				stock_tech_idx_dict[date]['Supported_point'] = pnt_dict_final_all[date]
+				if date in pnt_dict_final_all.keys():
+					stock_tech_idx_dict[date]['Supported_point'] = pnt_dict_final_all[date]
 		elif pnt_type == 'Pressed_point':
 			for date in stock_tech_idx_dict.keys():
-				stock_tech_idx_dict[date]['Pressed_point'] = pnt_dict_final_all[date]
+				if date in pnt_dict_final_all.keys():
+					stock_tech_idx_dict[date]['Pressed_point'] = pnt_dict_final_all[date]
 		else:
 			assert False, 'wrong with pnt_type: {} in combine_pnt()'.format(pnt_type)
 		return stock_tech_idx_dict
 
-	def get_supported_point(self, file_path, stock_tech_idx_dict, sup_pnt_close_interval=100, valid_percentage_sup_pnt_threthod=0.5):
+	def get_supported_point(self, file_path, stock_tech_idx_dict, sup_pnt_close_interval=100, valid_percentage_sup_pnt_threthod=0.5, m=300):
 		# step1 先跑5年，記錄最大累積成交量支撐點（sup_pnt_max）
 		# step2 從第6年的第一開始，繼續找支撐點，一旦支撐點形成，先看該支撐點的價格跟其他支撐點的價格距離近不近，如果近就合併(update sup_pnt_dict)
 		# sup_pnt_dict = {					sup_pnt_dict = {
@@ -1034,6 +1211,8 @@ class Trader(object):
 		next_drop_rate = 0.1
 		close_max = -1
 		for idx_temp, Close_temp in enumerate(stock_close_list_temp):
+			if (len(stock_close_list_temp) - idx_temp) > m:
+				continue
 			support_list = []
 			sup_pnt_dict = {}
 			stock_close_list = stock_close_list_temp[0:idx_temp+1]
@@ -1107,7 +1286,7 @@ class Trader(object):
 		stock_tech_idx_dict = self.combine_pnt(stock_tech_idx_dict, sup_pnt_dict_final_all, 'Pressed_point')
 		return stock_tech_idx_dict
 
-	def get_pressed_point(self, file_path, stock_tech_idx_dict, press_pnt_close_interval=100, valid_percentage_press_pnt_threthod=0.5):
+	def get_pressed_point(self, file_path, stock_tech_idx_dict, press_pnt_close_interval=100, valid_percentage_press_pnt_threthod=0.5, m=300):
 		first_date = (list(stock_tech_idx_dict.keys())[0])
 		first_date_num = self.get_date_num(first_date)
 
@@ -1138,6 +1317,8 @@ class Trader(object):
 		close_max = -1
 		valid_percentage_press_pnt_threthod = 0.5
 		for idx_temp, Close_temp in enumerate(stock_close_list_temp):
+			if (len(stock_close_list_temp) - idx_temp) > m:
+				continue
 			press_list = []
 			stock_close_list = stock_close_list_temp[0:idx_temp+1]
 			stock_date_list = stock_date_list_temp[0:idx_temp+1]
@@ -1206,7 +1387,8 @@ class Trader(object):
 		"""
 		K_old, D_old = 0.0, 0.0
 		tmp_high_price_list,  tmp_low_price_list = [], []
-		for date in stock_tech_idx_dict.keys():
+		stock_tech_idx_date_list = list(stock_tech_idx_dict.keys())
+		for date in stock_tech_idx_date_list[-m:]:
 			tmp_high_price_list.append(stock_tech_idx_dict[date]['High'])
 			tmp_low_price_list.append(stock_tech_idx_dict[date]['Low'])
 			if len(tmp_high_price_list) == nKD and len(tmp_low_price_list) == nKD:
@@ -1228,11 +1410,9 @@ class Trader(object):
 			writer = csv.writer(csvfile)
 			writer.writerow(['idx', 'date', 'Close', 'MA', 'MACD', 'D', 'RSI', 'Supported_point', 'Pressed_point'])
 			for index, date in enumerate(stock_tech_idx_dict.keys()):
-				#print (index)
-				#print (date)
 				writer.writerow([index, date, stock_tech_idx_dict[date]['Close']\
-					, stock_tech_idx_dict[date]['MA'], stock_tech_idx_dict[date]['MACD']\
-					, stock_tech_idx_dict[date]['D'], stock_tech_idx_dict[date]['RSI']\
+					, -1, stock_tech_idx_dict[date]['MACD']\
+					, stock_tech_idx_dict[date]['D'], -1\
 					, json.dumps(stock_tech_idx_dict[date]['Supported_point'])\
 					, json.dumps(stock_tech_idx_dict[date]['Supported_point'])])
 
@@ -2025,6 +2205,9 @@ class Trader(object):
 				os.mkdir(self.option_com_order_folder_path)
 			if not os.path.exists(self.techidx_folder_path):
 				os.mkdir(self.techidx_folder_path)
+			if not os.path.exists(self.pickle_folder_path):
+				os.mkdir(self.pickle_folder_path)
+				
 			df = self.crawl_price(stock_name)
 			if len(df) < self.min_days:
 				continue
@@ -2585,8 +2768,41 @@ def main_combine_csv():
 						content_list.append(final_csv_dict[item])
 			writer.writerow(content_list)
 
+def main_csv_pickle():
+	tech_csv_list = os.listdir('/home/ckwang/project/option/techidx')
+	
+	
+	for tech_csv in tech_csv_list:
+		tech_csv_path = os.path.join('/home/ckwang/project/option/techidx', tech_csv)
+		pickle_path = os.path.join('/home/ckwang/project/option/pickle', tech_csv[:-4]+'.pickle')
+		df = pd.read_csv(tech_csv_path)
+		df_shape = df.shape
+		stock_tech_idx_dict = {}
+		for num_of_date in range(1, df_shape[0]):
+			Supported_point_dict = {}
+			row = df[:][num_of_date:num_of_date+1] # Close,MA,MACD,D,RSI,Supported_point,Pressed_point
+			date = row['date'].values[0]
+			Close = row['Close'].values[0]
+			MACD = row['MACD'].values[0]
+			D = row['D'].values[0]
+			Supported_point = row['Supported_point'].values[0]
+			Supported_point = json.loads(Supported_point)
+
+
+			#print (type(Supported_point), Supported_point)
+			for k in Supported_point.keys():
+				Supported_point_dict[float(k)] = Supported_point[k]
+			stock_tech_idx_dict[str(date)] = copy.deepcopy({'D': D, 'MACD': MACD, 'Supported_point': Supported_point, 'Pressed_point': Supported_point})
+
+		with open(pickle_path, 'wb') as f_w:
+			pickle.dump(stock_tech_idx_dict, f_w)
+
+
+
+
 if __name__ == '__main__':
 	main()
+	#main_csv_pickle()
 	#main_combine_csv()
 	#main_update_lookuptable()
 	#main_best_contract()

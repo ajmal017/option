@@ -201,19 +201,31 @@ class Trader(object):
 				m = 300
 			else:
 				stock_tech_idx_dict = {}
+
+			stock_tech_idx_dict = t.get_stock_value(file_path, stock_tech_idx_dict, m=m)
+			stock_tech_idx_dict = t.get_KD(file_path, stock_tech_idx_dict, nBin=5, nKD=9, m=m)
+			stock_tech_idx_dict = t.get_RSI(file_path, stock_tech_idx_dict, nBin=5, n=6, m=m)
+			stock_tech_idx_dict = t.get_MA(file_path, stock_tech_idx_dict, Total_day=m-200, percent=1)
+
+			stock_tech_idx_dict = t.get_MACD(file_path, stock_tech_idx_dict, Total_day_MACD=m, MACD_short=MACD_short, MACD_long=MACD_long, MACD_signallength=MACD_signallength)
+
+			stock_tech_idx_dict = t.get_supported_point(file_path, stock_tech_idx_dict, sup_pnt_close_interval=sup_pnt_close_interval, valid_percentage_sup_pnt_threthod=valid_percentage_sup_pnt_threthod, m=m)
+			stock_tech_idx_dict = t.get_pressed_point(file_path, stock_tech_idx_dict, press_pnt_close_interval=press_pnt_close_interval, valid_percentage_press_pnt_threthod=valid_percentage_press_pnt_threthod, m=m)
+
+
 		except:
 			m = len(self.crawl_price(stock_name))
 			stock_tech_idx_dict = {}
 
-		stock_tech_idx_dict = t.get_stock_value(file_path, stock_tech_idx_dict, m=m)
-		stock_tech_idx_dict = t.get_KD(file_path, stock_tech_idx_dict, nBin=5, nKD=9, m=m)
-		stock_tech_idx_dict = t.get_RSI(file_path, stock_tech_idx_dict, nBin=5, n=6, m=m)
-		stock_tech_idx_dict = t.get_MA(file_path, stock_tech_idx_dict, Total_day=m-200, percent=1)
+			stock_tech_idx_dict = t.get_stock_value(file_path, stock_tech_idx_dict, m=m)
+			stock_tech_idx_dict = t.get_KD(file_path, stock_tech_idx_dict, nBin=5, nKD=9, m=m)
+			stock_tech_idx_dict = t.get_RSI(file_path, stock_tech_idx_dict, nBin=5, n=6, m=m)
+			stock_tech_idx_dict = t.get_MA(file_path, stock_tech_idx_dict, Total_day=m-200, percent=1)
 
-		stock_tech_idx_dict = t.get_MACD(file_path, stock_tech_idx_dict, Total_day_MACD=m, MACD_short=MACD_short, MACD_long=MACD_long, MACD_signallength=MACD_signallength)
+			stock_tech_idx_dict = t.get_MACD(file_path, stock_tech_idx_dict, Total_day_MACD=m, MACD_short=MACD_short, MACD_long=MACD_long, MACD_signallength=MACD_signallength)
 
-		stock_tech_idx_dict = t.get_supported_point(file_path, stock_tech_idx_dict, sup_pnt_close_interval=sup_pnt_close_interval, valid_percentage_sup_pnt_threthod=valid_percentage_sup_pnt_threthod, m=m)
-		stock_tech_idx_dict = t.get_pressed_point(file_path, stock_tech_idx_dict, press_pnt_close_interval=press_pnt_close_interval, valid_percentage_press_pnt_threthod=valid_percentage_press_pnt_threthod, m=m)
+			stock_tech_idx_dict = t.get_supported_point(file_path, stock_tech_idx_dict, sup_pnt_close_interval=sup_pnt_close_interval, valid_percentage_sup_pnt_threthod=valid_percentage_sup_pnt_threthod, m=m)
+			stock_tech_idx_dict = t.get_pressed_point(file_path, stock_tech_idx_dict, press_pnt_close_interval=press_pnt_close_interval, valid_percentage_press_pnt_threthod=valid_percentage_press_pnt_threthod, m=m)
 
 		with open(pickle_path, 'wb') as f_w:
 			pickle.dump(stock_tech_idx_dict, f_w)

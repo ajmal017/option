@@ -188,19 +188,21 @@ class Trader(object):
 		MACD_short=12
 		MACD_long=26
 		MACD_signallength=9
-
-		pickle_path = os.path.join(self.pickle_folder_path, stock_name+".pickle")
-		if os.path.exists(pickle_path):
-			with open(pickle_path, 'rb') as f_r:
-				stock_tech_idx_dict = pickle.load(f_r)
-			m = 300
-		elif os.path.exists(tech_idx_path):
-			self.techidx_to_pickle(stock_name)
-			with open(pickle_path, 'rb') as f_r:
-				stock_tech_idx_dict = pickle.load(f_r)
-			m = 300
-		else:
-
+		try:
+			pickle_path = os.path.join(self.pickle_folder_path, stock_name+".pickle")
+			if os.path.exists(pickle_path):
+				with open(pickle_path, 'rb') as f_r:
+					stock_tech_idx_dict = pickle.load(f_r)
+				m = 300
+			elif os.path.exists(tech_idx_path):
+				self.techidx_to_pickle(stock_name)
+				with open(pickle_path, 'rb') as f_r:
+					stock_tech_idx_dict = pickle.load(f_r)
+				m = 300
+			else:
+				stock_tech_idx_dict = {}
+		except:
+			m = len(self.crawl_price(stock_name))
 			stock_tech_idx_dict = {}
 
 		stock_tech_idx_dict = t.get_stock_value(file_path, stock_tech_idx_dict, m=m)

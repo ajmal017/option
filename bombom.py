@@ -135,6 +135,7 @@ class Trader(object):
 		self.analysis_statement_status = 1  #0: don't care, 1: basic(volume & optionable), 2: all function in analysis_statement()
 		self.un_hit_probability_thre = 0.0 #0.1
 
+		self.delta_d_min = 21
 		self.delta_d_max = 120
 
 	def get_techidx_result(self, stock_name):
@@ -743,6 +744,8 @@ class Trader(object):
 			### hard code with parameter ###
 			if delta_d > self.delta_d_max:
 				continue
+			if delta_d < self.delta_d_min:
+				continue
 
 			if (row['type'].values != type_last or row['date'].values != date_last):
 				#del contracts_list[-1]
@@ -835,6 +838,7 @@ class Trader(object):
 					'20191012': {'Close': xxx, 'High': xxx, 'Low': xxx},
 				}
 		"""
+		Open_last, High_last, Low_last, Close_last, Volume_last = 0, 0, 0, 0, 0
 		with open(csv_path, 'r') as file_read:
 			for line in file_read.readlines()[-m:]:
 				line = line.split(',')
@@ -2024,6 +2028,8 @@ class Trader(object):
 		while not stock_queues.empty():
 			fail_flag = False
 			stock_name = stock_queues.get()
+			#if not stock_name[0:1] in ['R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']:
+			#	continue
 			#if not self.analysis_statement(stock_name):
 			#	continue
 
@@ -2568,7 +2574,7 @@ def main_combine_csv():
 
 	#final_csv_list_all = sorted_by_prob(final_csv_list_all, 'un_hit_probability')
 
-	with open(os.path.join(t.option_com_order_folder_path, 'ALL.csv'), 'w', newline='') as csvfile:
+	with open(os.path.join(t.option_com_order_folder_path, 'All.csv'), 'w', newline='') as csvfile:
 		writer = csv.writer(csvfile)
 		#item_list = ['sell_contractSymbol', 'buy_contractSymbol', 'except_value', 'sample_num', 'close', 'un_hit_probability', 'return_on_invest', 'date']
 		item_list = ['type', 'stock', 'sell_strike', 'buy_strike', 'except_value', 'sample_num', 'close', 'un_hit_probability', 'return_on_invest', 'date']

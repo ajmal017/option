@@ -567,6 +567,7 @@ class Trader(object):
 					best_combin_contract['un_hit_probability'] = probability_reuslt_dict['p1'] / (probability_reuslt_dict['all']+0.001)
 					best_combin_contract['return_on_invest'] = combin_contract['return_on_invest']
 					best_combin_contract['date'] = strike_date
+					best_combin_contract['distance'] = round((abs(combin_contract['sell_strike_price']-combin_contract['lasted_close']) / combin_contract['sell_strike_price']), 2)
 					if best_combin_contract['un_hit_probability'] > self.un_hit_probability_thre:
 						#best_combin_contract_all[strike_date] = copy.deepcopy(best_combin_contract)
 						best_combin_contract_all_list.append(copy.deepcopy(best_combin_contract))

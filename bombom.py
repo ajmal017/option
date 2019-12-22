@@ -429,9 +429,9 @@ class Trader(object):
 				if close_value < float(press_pnt_value) and float(press_pnt_value) < sell_strike:
 					with_press_pnt_flag = True
 			if not with_press_pnt_flag:
-				return False
+				return point_dict, False
 			else:
-				return True
+				return point_dict, True
 		elif typ == 'Supported_point':
 #			point_dict = json.loads(u'{}'.format(row_lasted[typ].values[0]))
 			with_sup_pnt_flag = False
@@ -439,9 +439,9 @@ class Trader(object):
 				if close_value > float(sup_pnt_value) and float(sup_pnt_value) > sell_strike:
 					with_sup_pnt_flag = True
 			if not with_sup_pnt_flag:
-				return False
+				return point_dict, False
 			else:
-				return True
+				return point_dict, True
 		else:
 			assert False, 'typ wrong with {}'.format(typ)
 
@@ -503,7 +503,8 @@ class Trader(object):
 				buy_strike_price = combin_contract['buy_strike_price']
 				strike_date = combin_contract['sell_strike_date']
 				probability_reuslt_dict_all = {}
-				if not self.check_sup_press_point(row_lasted, close_value, sell_strike_price, typ):
+				press_point, check_sup_press_point_result = self.check_sup_press_point(row_lasted, close_value, sell_strike_price, typ):
+				if not check_sup_press_point_result:
 					continue
 				for keys in keys_list:
 					if typ == 'put':
@@ -568,6 +569,8 @@ class Trader(object):
 					best_combin_contract['return_on_invest'] = combin_contract['return_on_invest']
 					best_combin_contract['date'] = strike_date
 					best_combin_contract['distance'] = round((abs(combin_contract['sell_strike_price']-combin_contract['lasted_close']) / combin_contract['sell_strike_price']), 2)
+					best_combin_contract['press_point'] = press_point
+					
 					if best_combin_contract['un_hit_probability'] > self.un_hit_probability_thre:
 						#best_combin_contract_all[strike_date] = copy.deepcopy(best_combin_contract)
 						best_combin_contract_all_list.append(copy.deepcopy(best_combin_contract))

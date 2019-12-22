@@ -107,7 +107,7 @@ class Trader(object):
 	def __init__(self, period_days, difference_rate, stock_folder_path, option_folder_path, roe_ttm):
 		self.stock_name = -1
 		self.period_days = period_days
-		self.difference_rate = 0.1#difference_rate
+		self.difference_rate = 0.05 #difference_rate
 		self.roe_ttm = roe_ttm
 		self.stock_folder_path = stock_folder_path
 		self.option_folder_path = option_folder_path
@@ -2245,6 +2245,7 @@ class Trader(object):
 			print (best_combin_contract_all)
 
 			print ('worker number {}, stock_name is {}'.format(workers_num, stock_name))
+			#stock_queues.put(stock_name)
 
 #			for date in best_combin_contract_all.keys():
 
